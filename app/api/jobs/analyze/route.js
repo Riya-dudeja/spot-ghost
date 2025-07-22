@@ -41,37 +41,41 @@ export async function POST(req) {
         geminiAI = await analyzeJobWithAI(jobData);
         if (geminiAI?.analysis) {
           text = geminiAI.analysis;
-          text = text.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim();
-          let verdictMatch = text.match(/\b(LEGITIMATE|SUSPICIOUS|FRAUDULENT)\b/i);
-          verdict = verdictMatch ? verdictMatch[1].toUpperCase() : null;
-          let lines = text.split('\n');
-          let verdictLineIdx = lines.findIndex(line => /\b(LEGITIMATE|SUSPICIOUS|FRAUDULENT)\b/i.test(line));
-          if (verdictLineIdx !== -1) {
-            let summaryLines = [];
-            for (let i = verdictLineIdx + 1; i < lines.length && summaryLines.length < 3; i++) {
-              if (lines[i].trim()) summaryLines.push(lines[i].trim());
-            }
-            summary = summaryLines.join(' ');
-          }
-          if (!summary || summary.length < 10) {
-            let summaryLines = [];
-            for (let i = 0; i < lines.length && summaryLines.length < 3; i++) {
-              if (lines[i].trim()) summaryLines.push(lines[i].trim());
-            }
-            summary = summaryLines.join(' ');
-          }
+          verdict = geminiAI.verdict || null;
+          summary = geminiAI.summary || null;
         }
       } catch (e) {
         console.warn('Gemini AI analysis for manual job failed:', e.message);
       }
 
+      // Classic analysis
+      const classic = analyzeJob(jobData);
+
       analysisResult = {
         job: {
           ...jobData,
-          geminiVerdict: verdict,
-          geminiSummary: summary,
-          geminiAnalysis: text // full, cleaned Gemini analysis
-        }
+          classicAnalysis: {
+            safetyScore: classic.safetyScore,
+            riskScore: classic.riskScore,
+            riskLevel: classic.riskLevel,
+            redFlags: classic.warnings,
+            greenFlags: classic.greenFlags,
+            recommendations: classic.recommendations
+          },
+          aiAnalysis: geminiAI ? {
+            verdict: geminiAI.verdict,
+            confidence: geminiAI.confidence,
+            summary: geminiAI.summary,
+            redFlags: geminiAI.red_flags,
+            greenFlags: geminiAI.green_flags,
+            companyAnalysis: geminiAI.company_analysis,
+            jobDescriptionAnalysis: geminiAI.job_description_analysis,
+            contactAnalysis: geminiAI.contact_analysis,
+            otherNotes: geminiAI.other_notes,
+            raw: geminiAI.analysis
+          } : null
+        },
+        professionalSummary: generateProfessionalSummary(classic, geminiAI)
       };
     } else if (method === 'linkonly') {
       // For link-only, run classic analysis and return results
@@ -126,6 +130,7 @@ function generateRecommendations(warnings, safetyScore, riskLevel) {
 // Core job analysis function
 export function analyzeJob(jobData) {
   const warnings = [];
+  const greenFlags = [];
   let riskScore = 0;
 
   // Normalize data
@@ -147,6 +152,8 @@ export function analyzeJob(jobData) {
   if (foundCriticalPhrases.length > 0) {
     warnings.push(`🚨 Contains common scam phrases: ${foundCriticalPhrases.slice(0, 2).join(', ')}`);
     riskScore += foundCriticalPhrases.length * 40;
+  } else {
+    greenFlags.push('No common scam phrases detected.');
   }
 
   // 2. High-pressure tactics
@@ -159,6 +166,8 @@ export function analyzeJob(jobData) {
   if (foundHighPressure.length > 0) {
     warnings.push(`⚠️ Uses high-pressure language: ${foundHighPressure.slice(0, 2).join(', ')}`);
     riskScore += foundHighPressure.length * 25;
+  } else {
+    greenFlags.push('No high-pressure or urgent language detected.');
   }
 
   // 3. Email analysis
@@ -173,6 +182,8 @@ export function analyzeJob(jobData) {
     if (freeEmailDomains.includes(domain) && company.includes('corp')) {
       warnings.push('⚠️ Large company using personal email instead of business email');
       riskScore += 30;
+    } else if (!freeEmailDomains.includes(domain)) {
+      greenFlags.push('Contact email uses a business domain.');
     }
   }
 
@@ -184,18 +195,24 @@ export function analyzeJob(jobData) {
     if (url.includes('blogspot') || url.includes('wordpress.com') || url.includes('wix')) {
       warnings.push('⚠️ Job posted on free website platform');
       riskScore += 35;
+    } else {
+      greenFlags.push('Job not posted on a free website platform.');
     }
 
     // Shortened URLs
     if (url.includes('bit.ly') || url.includes('tinyurl') || url.includes('t.co')) {
       warnings.push('🚨 Uses shortened/hidden web address - major red flag');
       riskScore += 50;
+    } else {
+      greenFlags.push('No shortened or hidden web address detected.');
     }
 
     // Non-HTTPS
     if (url.startsWith('http://')) {
       warnings.push('⚠️ Website is not secure (no HTTPS)');
       riskScore += 20;
+    } else if (url.startsWith('https://')) {
+      greenFlags.push('Website uses secure HTTPS connection.');
     }
   }
 
@@ -220,6 +237,8 @@ export function analyzeJob(jobData) {
         warnings.push('⚠️ Hourly wage seems unusually high');
         riskScore += 30;
       }
+    } else {
+      greenFlags.push('Salary/compensation appears realistic.');
     }
   }
 
@@ -232,6 +251,8 @@ export function analyzeJob(jobData) {
   if (missingInfo.length > 1) {
     warnings.push(`Missing key information: ${missingInfo.join(', ')}`);
     riskScore += missingInfo.length * 25;
+  } else {
+    greenFlags.push('All key job information is present.');
   }
 
   // 7. Generic content check
@@ -244,6 +265,8 @@ export function analyzeJob(jobData) {
   if (foundGeneric.length > 4) {
     warnings.push('Job description is very generic');
     riskScore += 20;
+  } else {
+    greenFlags.push('Job description is specific and detailed.');
   }
 
   // Calculate final scores
@@ -263,6 +286,7 @@ export function analyzeJob(jobData) {
     riskScore,
     riskLevel,
     warnings,
+    greenFlags,
     recommendations: generateRecommendations(warnings, safetyScore, riskLevel)
   };
 }
@@ -592,4 +616,33 @@ async function scanURLWithURLScan(url) {
     }
     throw error;
   }
+}
+
+// Professional summary generator for frontend display
+function generateProfessionalSummary(classic, geminiAI) {
+  let summary = '';
+  if (classic.riskLevel === 'Very Low') {
+    summary += '✅ This job posting appears to be legitimate based on our automated checks.';
+    if (classic.greenFlags && classic.greenFlags.length > 0) {
+      summary += '\n\n**Positive signals:**\n- ' + classic.greenFlags.join('\n- ');
+    }
+  } else {
+    summary += '⚠️ This job posting has some risk factors:';
+    if (classic.warnings && classic.warnings.length > 0) {
+      summary += '\n\n**Red flags:**\n- ' + classic.warnings.join('\n- ');
+    }
+  }
+  if (geminiAI && geminiAI.verdict) {
+    summary += `\n\n**Gemini AI verdict:** ${geminiAI.verdict}`;
+    if (geminiAI.summary) {
+      summary += `\n${geminiAI.summary}`;
+    }
+    if (geminiAI.red_flags && geminiAI.red_flags.length > 0) {
+      summary += '\n\n**AI-identified red flags:**\n- ' + geminiAI.red_flags.join('\n- ');
+    }
+    if (geminiAI.green_flags && geminiAI.green_flags.length > 0) {
+      summary += '\n\n**AI-identified positive signals:**\n- ' + geminiAI.green_flags.join('\n- ');
+    }
+  }
+  return summary.trim();
 }
