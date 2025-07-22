@@ -395,48 +395,17 @@ export async function analyzeJobWithAI(jobData) {
   if (!apiKey) return null;
   
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-  const prompt = `Act as a fraud detection agent for online job listings. Analyze the provided job details and determine if the job is LEGITIMATE, SUSPICIOUS, or FRAUDULENT. Consider the following:
-
-- Company history and reputation (is the company real, established, and does it have a positive track record?)
-- Recent job postings by this company (is this job consistent with their usual postings?)
-- Job description realism (are the requirements, salary, and benefits realistic for the role and location?)
-- Contact information (is the email or application URL professional and matches the company domain?)
-- Any red flags (unusual requests, poor grammar, urgent language, etc.)
-- Any positive signals (well-written, matches company style, verifiable details, etc.)
-
-Here are the job details:
-Title: ${jobData.title}
-Company: ${jobData.company}
-Location: ${jobData.location || 'N/A'}
-Job Type: ${jobData.jobType || 'N/A'}
-Experience Level: ${jobData.experienceLevel || 'N/A'}
-Salary/Compensation: ${jobData.salary || 'N/A'}
-Company Size: ${jobData.companySize || 'N/A'}
-Posted Date: ${jobData.postedDate || 'N/A'}
-Application Deadline: ${jobData.applicationDeadline || 'N/A'}
-Source URL: ${jobData.applicationUrl || 'N/A'}
-
-Job Description:
-${jobData.description}
-
-Requirements:
-${jobData.requirements || 'N/A'}
-
-Qualifications:
-${jobData.qualifications || 'N/A'}
-
-Benefits:
-${jobData.benefits || 'N/A'}
-
-Contact Info:
-${jobData.contactEmail || 'N/A'}
-
-Application Instructions:
-${jobData.applicationInstructions || 'N/A'}
-
----
-
-Provide a clear verdict (LEGITIMATE, SUSPICIOUS, or FRAUDULENT) and a concise summary explaining your reasoning, referencing the above factors. Be specific about any red or green flags, and mention if the company or job appears consistent with real-world data or not.`;
+  const prompt = `You are an expert fraud detection agent for online job listings. Analyze the provided job details and return your findings in the following JSON format:\n\n{
+  "verdict": "LEGITIMATE | SUSPICIOUS | FRAUDULENT",
+  "confidence": "0-100",
+  "summary": "A concise summary of your reasoning.",
+  "red_flags": ["List specific red flags with evidence from the job data."],
+  "green_flags": ["List specific positive signals with evidence from the job data."],
+  "company_analysis": "Is the company real, established, and reputable? Reference any evidence.",
+  "job_description_analysis": "Is the job description realistic and detailed? Reference any evidence.",
+  "contact_analysis": "Is the contact information professional and matching the company domain?",
+  "other_notes": "Any other relevant observations."
+}\n\nHere are the job details:\nTitle: ${jobData.title}\nCompany: ${jobData.company}\nLocation: ${jobData.location || 'N/A'}\nJob Type: ${jobData.jobType || 'N/A'}\nExperience Level: ${jobData.experienceLevel || 'N/A'}\nSalary/Compensation: ${jobData.salary || 'N/A'}\nCompany Size: ${jobData.companySize || 'N/A'}\nPosted Date: ${jobData.postedDate || 'N/A'}\nApplication Deadline: ${jobData.applicationDeadline || 'N/A'}\nSource URL: ${jobData.applicationUrl || 'N/A'}\n\nJob Description:\n${jobData.description}\n\nRequirements:\n${jobData.requirements || 'N/A'}\n\nQualifications:\n${jobData.qualifications || 'N/A'}\n\nBenefits:\n${jobData.benefits || 'N/A'}\n\nContact Info:\n${jobData.contactEmail || 'N/A'}\n\nApplication Instructions:\n${jobData.applicationInstructions || 'N/A'}\n\nBe as specific as possible, reference the job data directly, and do not provide generic statements. Only output valid JSON.`;
   
   try {
     const body = {
@@ -447,12 +416,38 @@ Provide a clear verdict (LEGITIMATE, SUSPICIOUS, or FRAUDULENT) and a concise su
       timeout: 30000
     });
     
-    const analysis = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    
-    return {
-      analysis: analysis,
-      hasContent: analysis.length > 0
-    };
+    const raw = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let parsed = null;
+    try {
+      // Find the first JSON object in the response (in case Gemini adds text before/after)
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+    } catch (jsonErr) {
+      // Parsing failed, fallback to raw text
+      parsed = null;
+    }
+    if (parsed) {
+      return {
+        analysis: raw,
+        hasContent: true,
+        verdict: parsed.verdict,
+        confidence: parsed.confidence,
+        summary: parsed.summary,
+        red_flags: parsed.red_flags,
+        green_flags: parsed.green_flags,
+        company_analysis: parsed.company_analysis,
+        job_description_analysis: parsed.job_description_analysis,
+        contact_analysis: parsed.contact_analysis,
+        other_notes: parsed.other_notes
+      };
+    } else {
+      return {
+        analysis: raw,
+        hasContent: raw.length > 0
+      };
+    }
   } catch (error) {
     console.error('Gemini AI analysis error:', error.message);
     if (error.response) {
