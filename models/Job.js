@@ -25,6 +25,21 @@ const JobSchema = new mongoose.Schema({
     required: true
   },
   sourceUrl: String, // Original URL if extracted from job site
+  aiAnalyzed: {
+    type: Boolean,
+    default: false
+  },
+  confidenceScore: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 50
+  },
+  scamType: {
+    type: String,
+    default: 'none'
+  },
+  reasoning: String, // AI reasoning for the analysis
   submittedAt: {
     type: Date,
     default: Date.now,

@@ -609,21 +609,98 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          {/* Red Flags */}
-          {analysisResult.job.analysis.warnings.length > 0 && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6">
+          {/* AI Analysis Status */}
+          {analysisResult.job.analysis.aiAnalysis && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span className="text-green-300 font-medium">AI-Powered Analysis</span>
+                </div>
+                <span className="text-green-200 text-sm">
+                  Confidence: {analysisResult.job.analysis.confidenceScore}%
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Critical Red Flags */}
+          {analysisResult.job.analysis.redFlags && analysisResult.job.analysis.redFlags.length > 0 && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-6 mb-6">
               <h3 className="text-xl font-semibold text-red-300 mb-4 flex items-center">
                 <AlertTriangle className="mr-2" size={20} />
-                Red Flags Detected ({analysisResult.job.analysis.warnings.length})
+                Critical Red Flags ({analysisResult.job.analysis.redFlags.length})
               </h3>
               <ul className="space-y-2">
-                {analysisResult.job.analysis.warnings.map((flag, index) => (
+                {analysisResult.job.analysis.redFlags.map((flag, index) => (
                   <li key={index} className="flex items-start space-x-2 text-red-200">
-                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-red-400" />
                     <span>{flag}</span>
                   </li>
                 ))}
               </ul>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {analysisResult.job.analysis.warnings.length > 0 && (
+            <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-6 mb-6">
+              <h3 className="text-xl font-semibold text-orange-300 mb-4 flex items-center">
+                <AlertTriangle className="mr-2" size={20} />
+                Warnings Detected ({analysisResult.job.analysis.warnings.length})
+              </h3>
+              <ul className="space-y-2">
+                {analysisResult.job.analysis.warnings.map((flag, index) => (
+                  <li key={index} className="flex items-start space-x-2 text-orange-200">
+                    <AlertCircle size={16} className="mt-0.5 flex-shrink-0 text-orange-400" />
+                    <span>{flag}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Legitimacy Indicators */}
+          {analysisResult.job.analysis.legitimacyIndicators && analysisResult.job.analysis.legitimacyIndicators.length > 0 && (
+            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-6 mb-6">
+              <h3 className="text-xl font-semibold text-green-300 mb-4 flex items-center">
+                <CheckCircle className="mr-2" size={20} />
+                Positive Indicators ({analysisResult.job.analysis.legitimacyIndicators.length})
+              </h3>
+              <ul className="space-y-2">
+                {analysisResult.job.analysis.legitimacyIndicators.map((indicator, index) => (
+                  <li key={index} className="flex items-start space-x-2 text-green-200">
+                    <CheckCircle size={16} className="mt-0.5 flex-shrink-0 text-green-400" />
+                    <span>{indicator}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* AI Reasoning */}
+          {analysisResult.job.analysis.reasoning && analysisResult.job.analysis.aiAnalysis && (
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-6 mb-6">
+              <h3 className="text-xl font-semibold text-blue-300 mb-4 flex items-center">
+                <Info className="mr-2" size={20} />
+                AI Analysis Reasoning
+              </h3>
+              <p className="text-blue-200 leading-relaxed">{analysisResult.job.analysis.reasoning}</p>
+            </div>
+          )}
+
+          {/* Scam Type Detection */}
+          {analysisResult.job.analysis.scamType && analysisResult.job.analysis.scamType !== 'none' && (
+            <div className="bg-red-600/10 border border-red-600/30 rounded-xl p-6 mb-6">
+              <h3 className="text-xl font-semibold text-red-300 mb-4 flex items-center">
+                <AlertTriangle className="mr-2" size={20} />
+                Scam Type Detected
+              </h3>
+              <div className="bg-red-700/20 rounded-lg p-4">
+                <p className="text-red-200 font-medium capitalize">
+                  {analysisResult.job.analysis.scamType.replace('-', ' ')}
+                </p>
+              </div>
             </div>
           )}
 

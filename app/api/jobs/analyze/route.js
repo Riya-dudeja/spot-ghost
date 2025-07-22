@@ -1,10 +1,109 @@
 import dbConnect from '@/lib/dbConnect';
 import Job from '@/models/Job';
 import axios from 'axios';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// Core job analysis function
-function analyzeJob(jobData) {
+// Initialize Gemini AI
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Enhanced job analysis using Gemini AI
+async function analyzeJobWithGemini(jobData) {
+  try {
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+    const analysisPrompt = `
+You are an expert job fraud detection system. Analyze this job posting for potential scams or red flags.
+
+Job Details:
+- Title: ${jobData.title || 'Not provided'}
+- Company: ${jobData.company || 'Not provided'}
+- Location: ${jobData.location || 'Not provided'}
+- Salary: ${jobData.salary || 'Not provided'}
+- Description: ${jobData.description || 'Not provided'}
+- Requirements: ${jobData.requirements || 'Not provided'}
+- Contact Email: ${jobData.contactEmail || 'Not provided'}
+- Application URL: ${jobData.applicationUrl || 'Not provided'}
+
+Please provide a comprehensive fraud analysis in the following JSON format:
+{
+  "riskScore": <number 0-100>,
+  "riskLevel": "<Very Low|Low|Medium|High|Critical>",
+  "safetyScore": <number 0-100>,
+  "warnings": [
+    "<specific warning messages>"
+  ],
+  "redFlags": [
+    "<specific red flag descriptions>"
+  ],
+  "legitimacyIndicators": [
+    "<positive indicators if any>"
+  ],
+  "confidenceScore": <number 0-100>,
+  "reasoning": "<detailed explanation of the analysis>",
+  "scamType": "<type of scam if detected, or 'none'>",
+  "recommendations": [
+    "<specific actionable recommendations>"
+  ]
+}
+
+Focus on:
+1. Common job scam patterns (upfront payments, unrealistic salaries, vague descriptions)
+2. Language patterns typical of scammers (urgency, poor grammar, generic content)
+3. Company legitimacy indicators
+4. Contact information authenticity
+5. Job posting quality and professionalism
+6. Salary vs. role mismatch
+7. Application process red flags
+
+Be thorough but balanced - don't flag legitimate jobs as scams.
+`;
+
+    const result = await model.generateContent(analysisPrompt);
+    const response = await result.response;
+    const text = response.text();
+    
+    // Parse the JSON response
+    try {
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const analysis = JSON.parse(jsonMatch[0]);
+        
+        // Validate and normalize the response
+        return {
+          safetyScore: Math.max(0, Math.min(100, analysis.safetyScore || 100 - analysis.riskScore)),
+          riskScore: Math.max(0, Math.min(100, analysis.riskScore || 0)),
+          riskLevel: analysis.riskLevel || 'Medium',
+          warnings: analysis.warnings || [],
+          redFlags: analysis.redFlags || [],
+          legitimacyIndicators: analysis.legitimacyIndicators || [],
+          confidenceScore: analysis.confidenceScore || 50,
+          reasoning: analysis.reasoning || 'Analysis completed',
+          scamType: analysis.scamType || 'none',
+          recommendations: analysis.recommendations || [],
+          aiAnalysis: true
+        };
+      }
+    } catch (parseError) {
+      console.error('Failed to parse Gemini response:', parseError);
+      // Fall back to rule-based analysis
+      return analyzeJobFallback(jobData);
+    }
+    
+    // If no JSON found, fall back to rule-based analysis
+    return analyzeJobFallback(jobData);
+    
+  } catch (error) {
+    console.error('Gemini AI analysis failed:', error);
+    // Fall back to rule-based analysis
+    return analyzeJobFallback(jobData);
+  }
+}
+
+// Fallback rule-based analysis (improved version of original)
+function analyzeJobFallback(jobData) {
   const warnings = [];
+  const redFlags = [];
+  const legitimacyIndicators = [];
   let riskScore = 0;
   
   // Normalize data
@@ -19,28 +118,56 @@ function analyzeJob(jobData) {
     'processing fee', 'training fee', 'startup fee', 'activation fee',
     'money transfer', 'western union', 'wire transfer', 'cryptocurrency',
     'pyramid scheme', 'mlm opportunity', 'multi-level marketing',
-    'make $500 per day', 'earn thousands weekly', 'financial freedom'
+    'make $500 per day', 'earn thousands weekly', 'financial freedom',
+    'work from home no experience', 'guaranteed income', 'no selling required'
   ];
   
   const foundCriticalPhrases = criticalScamPhrases.filter(phrase => fullText.includes(phrase));
   if (foundCriticalPhrases.length > 0) {
-    warnings.push(`🚨 Contains common scam phrases: ${foundCriticalPhrases.slice(0, 2).join(', ')}`);
-    riskScore += foundCriticalPhrases.length * 40;
+    redFlags.push(`Contains common scam phrases: ${foundCriticalPhrases.slice(0, 3).join(', ')}`);
+    warnings.push('🚨 CRITICAL: This job posting contains language commonly used in employment scams');
+    riskScore += foundCriticalPhrases.length * 35;
   }
   
   // 2. High-pressure tactics
   const highPressurePhrases = [
     'urgent hiring', 'immediate start', 'no interview required',
-    'cash only', 'pay in advance', 'act now', 'limited time'
+    'cash only', 'pay in advance', 'act now', 'limited time',
+    'first come first serve', 'must decide today'
   ];
   
   const foundHighPressure = highPressurePhrases.filter(phrase => fullText.includes(phrase));
   if (foundHighPressure.length > 0) {
     warnings.push(`⚠️ Uses high-pressure language: ${foundHighPressure.slice(0, 2).join(', ')}`);
-    riskScore += foundHighPressure.length * 25;
+    riskScore += foundHighPressure.length * 20;
   }
   
-  // 3. Email analysis
+  // 3. Salary analysis
+  if (jobData.salary) {
+    const salary = jobData.salary.toLowerCase();
+    
+    if (salary.includes('unlimited') || salary.includes('no limit')) {
+      redFlags.push('Promises unlimited earnings');
+      warnings.push('🚨 Promises unlimited earnings - classic scam tactic');
+      riskScore += 40;
+    }
+    
+    // Check for unrealistic rates
+    const salaryNumbers = salary.match(/\$?\d+/g);
+    if (salaryNumbers) {
+      const maxNumber = Math.max(...salaryNumbers.map(n => parseInt(n.replace('$', ''))));
+      if (salary.includes('day') && maxNumber > 400) {
+        warnings.push('⚠️ Daily salary seems unrealistic for the role');
+        riskScore += 30;
+      }
+      if (salary.includes('hour') && maxNumber > 150) {
+        warnings.push('⚠️ Hourly wage seems unusually high');
+        riskScore += 25;
+      }
+    }
+  }
+  
+  // 4. Email analysis
   if (jobData.contactEmail) {
     const email = jobData.contactEmail.toLowerCase();
     const domain = email.split('@')[1];
@@ -49,80 +176,34 @@ function analyzeJob(jobData) {
       'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com'
     ];
     
-    if (freeEmailDomains.includes(domain) && company.includes('corp')) {
-      warnings.push('⚠️ Large company using personal email instead of business email');
-      riskScore += 30;
-    }
-  }
-  
-  // 4. Website analysis
-  if (jobData.applicationUrl) {
-    const url = jobData.applicationUrl.toLowerCase();
-    
-    // Free website platforms
-    if (url.includes('blogspot') || url.includes('wordpress.com') || url.includes('wix')) {
-      warnings.push('⚠️ Job posted on free website platform');
-      riskScore += 35;
-    }
-    
-    // Shortened URLs
-    if (url.includes('bit.ly') || url.includes('tinyurl') || url.includes('t.co')) {
-      warnings.push('🚨 Uses shortened/hidden web address - major red flag');
-      riskScore += 50;
-    }
-    
-    // Non-HTTPS
-    if (url.startsWith('http://')) {
-      warnings.push('⚠️ Website is not secure (no HTTPS)');
-      riskScore += 20;
-    }
-  }
-  
-  // 5. Compensation red flags
-  if (jobData.salary) {
-    const salary = jobData.salary.toLowerCase();
-    
-    if (salary.includes('unlimited') || salary.includes('no limit')) {
-      warnings.push('🚨 Promises unlimited earnings - classic scam tactic');
-      riskScore += 50;
-    }
-    
-    // Unrealistic daily/hourly rates
-    const salaryNumbers = salary.match(/\d+/g);
-    if (salaryNumbers) {
-      const maxNumber = Math.max(...salaryNumbers.map(Number));
-      if (salary.includes('day') && maxNumber > 300) {
-        warnings.push('⚠️ Daily salary seems unrealistic');
-        riskScore += 35;
-      }
-      if (salary.includes('hour') && maxNumber > 100) {
-        warnings.push('⚠️ Hourly wage seems unusually high');
-        riskScore += 30;
+    if (freeEmailDomains.includes(domain)) {
+      if (company.includes('corp') || company.includes('inc') || company.includes('llc')) {
+        warnings.push('⚠️ Large company using personal email instead of business email');
+        riskScore += 25;
       }
     }
   }
   
-  // 6. Missing information
+  // 5. Missing information analysis
   const missingInfo = [];
   if (!jobData.company || jobData.company.length < 2) missingInfo.push('company name');
-  if (!jobData.description || jobData.description.length < 50) missingInfo.push('job description');
-  if (!jobData.title || jobData.title.length < 3) missingInfo.push('job title');
+  if (!jobData.description || jobData.description.length < 50) missingInfo.push('detailed job description');
+  if (!jobData.title || jobData.title.length < 3) missingInfo.push('clear job title');
   
   if (missingInfo.length > 1) {
     warnings.push(`Missing key information: ${missingInfo.join(', ')}`);
-    riskScore += missingInfo.length * 25;
+    riskScore += missingInfo.length * 20;
   }
   
-  // 7. Generic content check
-  const genericPhrases = [
-    'competitive salary', 'dynamic environment', 'team player',
-    'excellent communication skills', 'fast-paced environment'
-  ];
-  
-  const foundGeneric = genericPhrases.filter(phrase => description.includes(phrase));
-  if (foundGeneric.length > 4) {
-    warnings.push('Job description is very generic');
-    riskScore += 20;
+  // 6. Legitimacy indicators
+  if (jobData.company && jobData.company.length > 10) {
+    legitimacyIndicators.push('Provides detailed company name');
+  }
+  if (jobData.description && jobData.description.length > 200) {
+    legitimacyIndicators.push('Includes comprehensive job description');
+  }
+  if (jobData.requirements && jobData.requirements.length > 50) {
+    legitimacyIndicators.push('Lists specific job requirements');
   }
   
   // Calculate final scores
@@ -142,12 +223,18 @@ function analyzeJob(jobData) {
     riskScore,
     riskLevel,
     warnings,
-    recommendations: generateRecommendations(warnings, safetyScore, riskLevel)
+    redFlags,
+    legitimacyIndicators,
+    confidenceScore: 70, // Lower confidence for rule-based
+    reasoning: 'Analysis completed using rule-based detection (AI analysis unavailable)',
+    scamType: riskScore > 70 ? 'potential-fraud' : 'none',
+    recommendations: generateRecommendations(warnings, safetyScore, riskLevel),
+    aiAnalysis: false
   };
 }
 
-// Enhanced URL analysis with URLScan.io integration
-async function analyzeURL(url) {
+// Enhanced URL analysis with Gemini AI
+async function analyzeURLWithGemini(url) {
   const warnings = [];
   let riskScore = 0;
   
@@ -155,87 +242,85 @@ async function analyzeURL(url) {
     const urlObj = new URL(url);
     const domain = urlObj.hostname.toLowerCase();
     
-    // 1. Basic URL structure analysis
-    // Legitimate job boards
+    // Basic URL structure analysis first
     const legitimateJobBoards = [
-      'linkedin.com', 'indeed.com', 'glassdoor.com', 'monster.com', 'ziprecruiter.com'
+      'linkedin.com', 'indeed.com', 'glassdoor.com', 'monster.com', 
+      'ziprecruiter.com', 'careerbuilder.com', 'dice.com'
     ];
     
     const isLegitimate = legitimateJobBoards.some(board => domain.includes(board));
     if (isLegitimate) {
       warnings.push('✅ Posted on legitimate job board');
-      riskScore -= 20;
-    } else {
-      // Suspicious domains
-      const suspiciousDomains = ['blogspot.com', 'wordpress.com', 'wix.com'];
-      if (suspiciousDomains.some(suspicious => domain.includes(suspicious))) {
-        warnings.push('⚠️ Posted on free website platform');
-        riskScore += 40;
-      }
-      
-      // Suspicious TLDs
-      const suspiciousTlds = ['.tk', '.ml', '.ga', '.cf'];
-      if (suspiciousTlds.some(tld => domain.endsWith(tld))) {
-        warnings.push('🚨 Suspicious domain extension');
-        riskScore += 35;
+      riskScore -= 30;
+    }
+    
+    // Use Gemini AI for URL analysis
+    if (process.env.GEMINI_API_KEY && !isLegitimate) {
+      try {
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        
+        const urlPrompt = `
+Analyze this URL for potential job scam indicators: ${url}
+
+Consider:
+1. Domain reputation and age indicators
+2. URL structure and suspicious patterns
+3. Known scam website characteristics
+4. Suspicious TLDs or domain patterns
+5. Shortened URL usage
+6. Free hosting platform usage
+
+Provide analysis in JSON format:
+{
+  "riskScore": <0-100>,
+  "warnings": ["<warning messages>"],
+  "isSuspicious": <true/false>,
+  "reasoning": "<explanation>"
+}
+`;
+
+        const result = await model.generateContent(urlPrompt);
+        const response = await result.response;
+        const text = response.text();
+        
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const urlAnalysis = JSON.parse(jsonMatch[0]);
+          riskScore += urlAnalysis.riskScore || 0;
+          warnings.push(...(urlAnalysis.warnings || []));
+        }
+      } catch (aiError) {
+        console.warn('Gemini URL analysis failed:', aiError.message);
       }
     }
     
-    // Shortened URLs
+    // Fallback URL checks
+    const suspiciousDomains = ['blogspot.com', 'wordpress.com', 'wix.com'];
+    if (suspiciousDomains.some(suspicious => domain.includes(suspicious))) {
+      warnings.push('⚠️ Posted on free website platform');
+      riskScore += 30;
+    }
+    
     const shorteners = ['bit.ly', 'tinyurl.com', 't.co'];
     if (shorteners.some(shortener => domain.includes(shortener))) {
       warnings.push('🚨 Shortened URL - major red flag');
-      riskScore += 60;
+      riskScore += 50;
     }
     
-    // HTTPS check
     if (!url.startsWith('https://')) {
       warnings.push('⚠️ Not secure (no HTTPS)');
-      riskScore += 25;
-    }
-    
-    // 2. URLScan.io analysis (if not a major job board to avoid rate limits)
-    if (!isLegitimate && process.env.URLSCAN_API_KEY) {
-      try {
-        console.log('Running URLScan.io analysis for:', domain);
-        const scanResult = await scanURLWithURLScan(url);
-        
-        if (scanResult.malicious) {
-          warnings.push('🚨 URL flagged as malicious by security scan');
-          riskScore += 80;
-        }
-        
-        if (scanResult.suspicious) {
-          warnings.push('⚠️ URL shows suspicious characteristics');
-          riskScore += 40;
-        }
-        
-        if (scanResult.phishing) {
-          warnings.push('🚨 Possible phishing site detected');
-          riskScore += 70;
-        }
-        
-        if (scanResult.newDomain) {
-          warnings.push('⚠️ Very new domain (recently registered)');
-          riskScore += 30;
-        }
-        
-      } catch (scanError) {
-        console.warn('URLScan.io analysis failed:', scanError.message);
-        // Don't fail the whole analysis if URLScan fails
-      }
+      riskScore += 20;
     }
     
   } catch (error) {
     warnings.push('🚨 Invalid or malformed URL');
-    riskScore += 50;
+    riskScore += 40;
   }
   
   // Calculate scores
   riskScore = Math.min(100, Math.max(0, riskScore));
   const safetyScore = Math.max(0, 100 - riskScore);
   
-  // Risk level
   let riskLevel;
   if (safetyScore >= 80) riskLevel = 'Very Low';
   else if (safetyScore >= 65) riskLevel = 'Low';
@@ -248,88 +333,9 @@ async function analyzeURL(url) {
     riskScore,
     riskLevel,
     warnings,
-    recommendations: generateRecommendations(warnings, safetyScore, riskLevel)
+    recommendations: generateRecommendations(warnings, safetyScore, riskLevel),
+    aiAnalysis: process.env.GEMINI_API_KEY ? true : false
   };
-}
-
-// URLScan.io integration
-async function scanURLWithURLScan(url) {
-  const apiKey = process.env.URLSCAN_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('URLScan.io API key not configured');
-  }
-  
-  try {
-    // Submit URL for scanning
-    const submitResponse = await axios.post('https://urlscan.io/api/v1/scan/', {
-      url: url,
-      visibility: 'private' // Keep scans private
-    }, {
-      headers: {
-        'API-Key': apiKey,
-        'Content-Type': 'application/json'
-      },
-      timeout: 10000
-    });
-    
-    const scanId = submitResponse.data.uuid;
-    
-    // Wait a moment for scan to complete
-    await new Promise(resolve => setTimeout(resolve, 15000));
-    
-    // Get scan results
-    const resultResponse = await axios.get(`https://urlscan.io/api/v1/result/${scanId}/`, {
-      timeout: 10000
-    });
-    
-    const result = resultResponse.data;
-    
-    // Analyze the results
-    const analysis = {
-      malicious: false,
-      suspicious: false,
-      phishing: false,
-      newDomain: false
-    };
-    
-    // Check verdicts
-    if (result.verdicts) {
-      analysis.malicious = result.verdicts.overall?.malicious || false;
-      analysis.suspicious = result.verdicts.overall?.suspicious || false;
-      
-      // Check for phishing indicators
-      if (result.verdicts.engines) {
-        analysis.phishing = Object.values(result.verdicts.engines).some(engine => 
-          engine.categories?.includes('phishing') || 
-          engine.categories?.includes('malicious')
-        );
-      }
-    }
-    
-    // Check domain age
-    if (result.page?.domain) {
-      const domainInfo = result.page.domain;
-      if (domainInfo.creation_date) {
-        const creationDate = new Date(domainInfo.creation_date);
-        const daysSinceCreation = (Date.now() - creationDate.getTime()) / (1000 * 60 * 60 * 24);
-        analysis.newDomain = daysSinceCreation < 30; // Less than 30 days old
-      }
-    }
-    
-    console.log('URLScan.io analysis result:', analysis);
-    return analysis;
-    
-  } catch (error) {
-    console.error('URLScan.io API error:', error.message);
-    
-    // If rate limited or temporary error, return neutral result
-    if (error.response?.status === 429) {
-      console.warn('URLScan.io rate limit reached');
-    }
-    
-    throw error;
-  }
 }
 
 // Generate actionable recommendations
@@ -337,50 +343,34 @@ function generateRecommendations(warnings, safetyScore, riskLevel) {
   const recommendations = [];
   const actionItems = [];
   
-  // Risk-based main recommendations
   if (safetyScore < 40) {
     recommendations.push('🚨 HIGH RISK: This job shows multiple red flags');
     recommendations.push('❌ Do NOT provide personal information or payment');
     actionItems.push('Report this listing to the job board');
     actionItems.push('Consider reporting to FTC at reportfraud.ftc.gov');
+    actionItems.push('Block the sender if contacted directly');
   } else if (safetyScore < 65) {
     recommendations.push('⚠️ MEDIUM RISK: Exercise caution');
     recommendations.push('🔍 Verify company legitimacy before proceeding');
     actionItems.push('Research the company thoroughly');
+    actionItems.push('Contact company through official website');
   } else {
     recommendations.push('✅ Appears legitimate, but stay vigilant');
-  }
-  
-  // Specific action items based on warnings
-  const warningText = warnings.join(' ').toLowerCase();
-  
-  if (warningText.includes('scam')) {
-    actionItems.push('Never pay money for job opportunities');
-    actionItems.push('Research common job scam tactics');
-  }
-  
-  if (warningText.includes('email')) {
-    actionItems.push('Contact company through official website');
-    actionItems.push('Verify email domain matches company');
-  }
-  
-  if (warningText.includes('website') || warningText.includes('url')) {
-    actionItems.push('Check company on LinkedIn and BBB');
-    actionItems.push('Verify company has legitimate website');
+    actionItems.push('Still verify company details independently');
   }
   
   // Universal safety tips
   const universalTips = [
-    'Trust your instincts - if something feels wrong, it probably is',
-    'Never pay money for training, equipment, or background checks',
+    'Never pay money for job opportunities',
+    'Legitimate employers don\'t ask for upfront payments',
     'Research the company using multiple sources',
-    'Legitimate employers provide clear job details and company info'
+    'Trust your instincts - if something feels wrong, it probably is'
   ];
   
   return {
     level: safetyScore < 40 ? 'critical' : safetyScore < 65 ? 'high' : 'medium',
     summary: recommendations,
-    actionItems: actionItems.slice(0, 6), // Limit to 6 most relevant
+    actionItems: actionItems.slice(0, 6),
     universalTips: universalTips
   };
 }
@@ -399,8 +389,8 @@ export async function POST(request) {
     let analysis;
     
     if (method === 'linkonly' && url) {
-      // URL-only analysis with URLScan.io
-      analysis = await analyzeURL(url);
+      // URL-only analysis
+      analysis = await analyzeURLWithGemini(url);
       
       jobData = {
         title: 'Link Analysis Only',
@@ -414,7 +404,7 @@ export async function POST(request) {
       };
       
     } else if (method === 'manual') {
-      // Manual entry analysis
+      // Manual entry analysis with Gemini AI
       jobData = {
         title: manualData.jobTitle || '',
         company: manualData.company || '',
@@ -426,7 +416,8 @@ export async function POST(request) {
         applicationUrl: manualData.applicationUrl || ''
       };
       
-      analysis = analyzeJob(jobData);
+      // Use Gemini AI for comprehensive analysis
+      analysis = await analyzeJobWithGemini(jobData);
       
     } else {
       return Response.json({ error: 'Invalid method or missing data' }, { status: 400 });
@@ -446,13 +437,16 @@ export async function POST(request) {
       flags: analysis.warnings,
       riskLevel: analysis.riskLevel,
       method: method,
-      sourceUrl: url || null
+      sourceUrl: url || null,
+      aiAnalyzed: analysis.aiAnalysis || false,
+      confidenceScore: analysis.confidenceScore || 50
     });
 
     console.log('Analysis complete:', { 
       safetyScore: analysis.safetyScore, 
       riskLevel: analysis.riskLevel, 
-      warningCount: analysis.warnings.length 
+      warningCount: analysis.warnings.length,
+      aiAnalysis: analysis.aiAnalysis
     });
 
     return Response.json({ 
@@ -465,7 +459,13 @@ export async function POST(request) {
           riskScore: analysis.riskScore,
           riskLevel: analysis.riskLevel,
           warnings: analysis.warnings,
-          recommendations: analysis.recommendations
+          redFlags: analysis.redFlags || [],
+          legitimacyIndicators: analysis.legitimacyIndicators || [],
+          recommendations: analysis.recommendations,
+          confidenceScore: analysis.confidenceScore,
+          reasoning: analysis.reasoning,
+          scamType: analysis.scamType,
+          aiAnalysis: analysis.aiAnalysis
         }
       }
     });
