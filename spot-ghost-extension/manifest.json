@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "SpotGhost - LinkedIn Job Scam Detector",
+  "version": "1.1.0",
+  "description": "Analyze LinkedIn job postings for scams and red flags using AI-powered detection",
+  "permissions": ["scripting", "activeTab"],
+  "host_permissions": [
+    "https://www.linkedin.com/jobs/view/*",
+    "https://www.linkedin.com/jobs/search/*",
+    "http://localhost:3000/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "SpotGhost Job Analyzer"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/view/*",
+        "https://www.linkedin.com/jobs/search/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "author": "SpotGhost Team",
+  "homepage_url": "https://github.com/Riya-dudeja/spot-ghost"
+}

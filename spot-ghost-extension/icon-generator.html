@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        canvas { border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+    <h3>SpotGhost Extension Icon Generator</h3>
+    <canvas id="icon16" width="16" height="16"></canvas>
+    <canvas id="icon48" width="48" height="48"></canvas>
+    <canvas id="icon128" width="128" height="128"></canvas>
+    
+    <script>
+        function createIcon(size) {
+            const canvas = document.getElementById(`icon${size}`);
+            const ctx = canvas.getContext('2d');
+            
+            // Black background with rounded corners
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, size, size);
+            
+            // Ghost emoji or text
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = `${Math.floor(size * 0.7)}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            if (size >= 32) {
+                ctx.fillText('👻', size/2, size/2);
+            } else {
+                // For small sizes, use a simple white circle
+                ctx.beginPath();
+                ctx.arc(size/2, size/2, size/3, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+            
+            // Convert to data URL and create download link
+            const dataURL = canvas.toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `icon${size}.png`;
+            link.href = dataURL;
+            link.textContent = `Download icon${size}.png`;
+            link.style.display = 'block';
+            link.style.margin = '5px';
+            document.body.appendChild(link);
+        }
+        
+        // Create all icons
+        [16, 48, 128].forEach(createIcon);
+    </script>
+</body>
+</html>

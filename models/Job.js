@@ -21,7 +21,7 @@ const JobSchema = new mongoose.Schema({
   },
   method: {
     type: String,
-    enum: ['url', 'manual', 'linkonly'],
+    enum: ['url', 'manual', 'linkonly', 'extension', 'linkedin'],
     required: true
   },
   sourceUrl: String, // Original URL if extracted from job site
@@ -31,8 +31,6 @@ const JobSchema = new mongoose.Schema({
   },
 });
 
-// Avoid OverwriteModelError in hot reload
-// Clear the model cache to ensure schema updates are applied
 if (mongoose.models.Job) {
   delete mongoose.models.Job;
 }
