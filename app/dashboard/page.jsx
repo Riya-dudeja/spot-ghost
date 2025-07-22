@@ -516,129 +516,181 @@ function DashboardHome() {
             </button>
           </div>
 
-          {/* Professional Summary */}
-          {analysisResult.professionalSummary && (
-            <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 rounded-xl p-6 mb-6">
-              <h3 className="text-xl font-semibold text-emerald-300 mb-4 flex items-center">
-                <span className="mr-2">📋</span>
-                Summary
-              </h3>
-              <div className="text-gray-200 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-900/50 rounded-lg p-4 border border-gray-600">
-                {analysisResult.professionalSummary}
-              </div>
-            </div>
-          )}
-
-          {/* Classic Analysis */}
-          {analysisResult.job && analysisResult.job.classicAnalysis && (
-            <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-6 mb-6">
-              <h3 className="text-xl font-semibold text-green-300 mb-4 flex items-center">
-                <span className="mr-2">🛡️</span>
-                Classic Analysis
+          {/* LINKONLY: Classic URL check only */}
+          {analysisResult.method === 'linkonly' && analysisResult.job && analysisResult.job.analysis && (
+            <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-xl p-6 mb-6">
+              <h3 className="text-xl font-semibold text-blue-300 mb-4 flex items-center">
+                <span className="mr-2">🔗</span>
+                Link Safety Check
               </h3>
               <div className="text-gray-200 text-lg font-bold mb-2">
-                Safety Score: <span className="text-emerald-400">{analysisResult.job.classicAnalysis.safetyScore ?? 'N/A'}</span>
+                Safety Score: <span className="text-emerald-400">{analysisResult.job.analysis.safetyScore ?? 'N/A'}</span>
               </div>
               <div className="text-gray-300 text-base mb-2">
-                <strong>Risk Level:</strong> {analysisResult.job.classicAnalysis.riskLevel}
+                <strong>Risk Level:</strong> {analysisResult.job.analysis.riskLevel}
               </div>
-              {analysisResult.job.classicAnalysis.redFlags && analysisResult.job.classicAnalysis.redFlags.length > 0 && (
+              {analysisResult.job.analysis.warnings && analysisResult.job.analysis.warnings.length > 0 && (
                 <div className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg p-4 border border-yellow-600 mb-2">
                   <strong>Red Flags:</strong>
                   <ul className="list-disc ml-6 mt-2">
-                    {analysisResult.job.classicAnalysis.redFlags.map((item, idx) => (
+                    {analysisResult.job.analysis.warnings.map((item, idx) => (
                       <li key={idx}>{item}</li>
                     ))}
                   </ul>
                 </div>
               )}
-              {analysisResult.job.classicAnalysis.greenFlags && analysisResult.job.classicAnalysis.greenFlags.length > 0 && (
+              {analysisResult.job.analysis.recommendations && (
                 <div className="text-green-300 text-sm bg-green-900/30 rounded-lg p-4 border border-green-600 mb-2">
-                  <strong>Positive Signals:</strong>
+                  <strong>Recommendations:</strong>
                   <ul className="list-disc ml-6 mt-2">
-                    {analysisResult.job.classicAnalysis.greenFlags.map((item, idx) => (
+                    {analysisResult.job.analysis.recommendations.summary?.map((item, idx) => (
                       <li key={idx}>{item}</li>
                     ))}
                   </ul>
                 </div>
               )}
-              <div className="mt-4 text-xs text-green-400 flex items-center">
-                <span className="mr-2">🔍</span>
-                <span>Classic SpotGhost analysis</span>
+              <div className="mt-4 text-xs text-blue-400 flex items-center">
+                <span className="mr-2">🌐</span>
+                <span>Link checked using SpotGhost and urlscan.io</span>
               </div>
             </div>
           )}
 
-          {/* Gemini AI Analysis */}
-          {analysisResult.job && analysisResult.job.aiAnalysis && (
-            <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6">
-              <h3 className="text-xl font-semibold text-purple-300 mb-4 flex items-center">
-                <span className="mr-2">🤖</span>
-                Gemini AI Analysis
+          {/* LINK: Prompt to use extension */}
+          {analysisResult.method === 'link' && (
+            <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-xl p-6 mb-6 text-center">
+              <h3 className="text-xl font-semibold text-yellow-300 mb-4 flex items-center justify-center">
+                <span className="mr-2">🧩</span>
+                Use the SpotGhost Extension
               </h3>
-              <div className="text-gray-200 text-lg font-bold mb-2">
-                Verdict: <span className={
-                  analysisResult.job.aiAnalysis.verdict === 'LEGITIMATE' ? 'text-green-400' :
-                  analysisResult.job.aiAnalysis.verdict === 'SUSPICIOUS' ? 'text-yellow-400' :
-                  analysisResult.job.aiAnalysis.verdict === 'FRAUDULENT' ? 'text-red-400' : 'text-gray-200'
-                }>{analysisResult.job.aiAnalysis.verdict || 'Unknown'}</span>
-                {analysisResult.job.aiAnalysis.confidence && (
-                  <span className="ml-4 text-xs text-purple-200">Confidence: {analysisResult.job.aiAnalysis.confidence}</span>
-                )}
+              <div className="text-gray-200 text-base mb-2">
+                For a full, accurate job analysis, please use the <span className="font-bold text-yellow-200">SpotGhost browser extension</span> to extract all job details directly from the job board page.
               </div>
-              {analysisResult.job.aiAnalysis.summary && (
-                <div className="text-gray-300 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-900/50 rounded-lg p-4 border border-gray-600 mb-2">
-                  {analysisResult.job.aiAnalysis.summary}
-                </div>
-              )}
-              {analysisResult.job.aiAnalysis.redFlags && analysisResult.job.aiAnalysis.redFlags.length > 0 && (
-                <div className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg p-4 border border-yellow-600 mb-2">
-                  <strong>AI-Identified Red Flags:</strong>
-                  <ul className="list-disc ml-6 mt-2">
-                    {analysisResult.job.aiAnalysis.redFlags.map((item, idx) => (
-                      <li key={idx}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {analysisResult.job.aiAnalysis.greenFlags && analysisResult.job.aiAnalysis.greenFlags.length > 0 && (
-                <div className="text-green-300 text-sm bg-green-900/30 rounded-lg p-4 border border-green-600 mb-2">
-                  <strong>AI-Identified Positive Signals:</strong>
-                  <ul className="list-disc ml-6 mt-2">
-                    {analysisResult.job.aiAnalysis.greenFlags.map((item, idx) => (
-                      <li key={idx}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {analysisResult.job.aiAnalysis.companyAnalysis && (
-                <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
-                  <strong>Company Analysis:</strong> {analysisResult.job.aiAnalysis.companyAnalysis}
-                </div>
-              )}
-              {analysisResult.job.aiAnalysis.jobDescriptionAnalysis && (
-                <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
-                  <strong>Job Description Analysis:</strong> {analysisResult.job.aiAnalysis.jobDescriptionAnalysis}
-                </div>
-              )}
-              {analysisResult.job.aiAnalysis.contactAnalysis && (
-                <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
-                  <strong>Contact Analysis:</strong> {analysisResult.job.aiAnalysis.contactAnalysis}
-                </div>
-              )}
-              {analysisResult.job.aiAnalysis.otherNotes && (
-                <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
-                  <strong>Other Notes:</strong> {analysisResult.job.aiAnalysis.otherNotes}
-                </div>
-              )}
-              {analysisResult.job.aiAnalysis.raw && (
-                <GeminiAnalysisSection analysis={analysisResult.job.aiAnalysis.raw} />
-              )}
-              <div className="mt-4 text-xs text-purple-400 flex items-center">
-                <span className="mr-2">⚡</span>
-                <span>Analysis powered by Gemini AI - Real-time fraud detection</span>
-              </div>
+              <div className="text-yellow-400 text-xs mt-2">This ensures you get the most reliable and detailed results.</div>
             </div>
+          )}
+
+          {/* MANUAL/EXTENSION: Full classic/AI analysis and summary */}
+          {analysisResult.job && analysisResult.job.classicAnalysis && (
+            <>
+              {analysisResult.professionalSummary && (
+                <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 rounded-xl p-6 mb-6">
+                  <h3 className="text-xl font-semibold text-emerald-300 mb-4 flex items-center">
+                    <span className="mr-2">📋</span>
+                    Summary
+                  </h3>
+                  <div className="text-gray-200 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-900/50 rounded-lg p-4 border border-gray-600">
+                    {analysisResult.professionalSummary}
+                  </div>
+                </div>
+              )}
+              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-6 mb-6">
+                <h3 className="text-xl font-semibold text-green-300 mb-4 flex items-center">
+                  <span className="mr-2">🛡️</span>
+                  Classic Analysis
+                </h3>
+                <div className="text-gray-200 text-lg font-bold mb-2">
+                  Safety Score: <span className="text-emerald-400">{analysisResult.job.classicAnalysis.safetyScore ?? 'N/A'}</span>
+                </div>
+                <div className="text-gray-300 text-base mb-2">
+                  <strong>Risk Level:</strong> {analysisResult.job.classicAnalysis.riskLevel}
+                </div>
+                {analysisResult.job.classicAnalysis.redFlags && analysisResult.job.classicAnalysis.redFlags.length > 0 && (
+                  <div className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg p-4 border border-yellow-600 mb-2">
+                    <strong>Red Flags:</strong>
+                    <ul className="list-disc ml-6 mt-2">
+                      {analysisResult.job.classicAnalysis.redFlags.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {analysisResult.job.classicAnalysis.greenFlags && analysisResult.job.classicAnalysis.greenFlags.length > 0 && (
+                  <div className="text-green-300 text-sm bg-green-900/30 rounded-lg p-4 border border-green-600 mb-2">
+                    <strong>Positive Signals:</strong>
+                    <ul className="list-disc ml-6 mt-2">
+                      {analysisResult.job.classicAnalysis.greenFlags.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="mt-4 text-xs text-green-400 flex items-center">
+                  <span className="mr-2">🔍</span>
+                  <span>Classic SpotGhost analysis</span>
+                </div>
+              </div>
+              {analysisResult.job.aiAnalysis && (
+                <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6">
+                  <h3 className="text-xl font-semibold text-purple-300 mb-4 flex items-center">
+                    <span className="mr-2">🤖</span>
+                    Gemini AI Analysis
+                  </h3>
+                  <div className="text-gray-200 text-lg font-bold mb-2">
+                    Verdict: <span className={
+                      analysisResult.job.aiAnalysis.verdict === 'LEGITIMATE' ? 'text-green-400' :
+                      analysisResult.job.aiAnalysis.verdict === 'SUSPICIOUS' ? 'text-yellow-400' :
+                      analysisResult.job.aiAnalysis.verdict === 'FRAUDULENT' ? 'text-red-400' : 'text-gray-200'
+                    }>{analysisResult.job.aiAnalysis.verdict || 'Unknown'}</span>
+                    {analysisResult.job.aiAnalysis.confidence && (
+                      <span className="ml-4 text-xs text-purple-200">Confidence: {analysisResult.job.aiAnalysis.confidence}</span>
+                    )}
+                  </div>
+                  {analysisResult.job.aiAnalysis.summary && (
+                    <div className="text-gray-300 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-900/50 rounded-lg p-4 border border-gray-600 mb-2">
+                      {analysisResult.job.aiAnalysis.summary}
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.redFlags && analysisResult.job.aiAnalysis.redFlags.length > 0 && (
+                    <div className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg p-4 border border-yellow-600 mb-2">
+                      <strong>AI-Identified Red Flags:</strong>
+                      <ul className="list-disc ml-6 mt-2">
+                        {analysisResult.job.aiAnalysis.redFlags.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.greenFlags && analysisResult.job.aiAnalysis.greenFlags.length > 0 && (
+                    <div className="text-green-300 text-sm bg-green-900/30 rounded-lg p-4 border border-green-600 mb-2">
+                      <strong>AI-Identified Positive Signals:</strong>
+                      <ul className="list-disc ml-6 mt-2">
+                        {analysisResult.job.aiAnalysis.greenFlags.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.companyAnalysis && (
+                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                      <strong>Company Analysis:</strong> {analysisResult.job.aiAnalysis.companyAnalysis}
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.jobDescriptionAnalysis && (
+                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                      <strong>Job Description Analysis:</strong> {analysisResult.job.aiAnalysis.jobDescriptionAnalysis}
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.contactAnalysis && (
+                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                      <strong>Contact Analysis:</strong> {analysisResult.job.aiAnalysis.contactAnalysis}
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.otherNotes && (
+                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                      <strong>Other Notes:</strong> {analysisResult.job.aiAnalysis.otherNotes}
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.raw && (
+                    <GeminiAnalysisSection analysis={analysisResult.job.aiAnalysis.raw} />
+                  )}
+                  <div className="mt-4 text-xs text-purple-400 flex items-center">
+                    <span className="mr-2">⚡</span>
+                    <span>Analysis powered by Gemini AI - Real-time fraud detection</span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
         </motion.div>
