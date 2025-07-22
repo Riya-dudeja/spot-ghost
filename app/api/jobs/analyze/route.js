@@ -1,10 +1,122 @@
 import dbConnect from '@/lib/dbConnect';
 import Job from '@/models/Job';
 import axios from 'axios';
+import * as cheerio from 'cheerio';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Extract job data from URL
+async function extractJobDataFromUrl(url) {
+  try {
+    console.log(`Extracting job data from: ${url}`);
+    
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive'
+      },
+      timeout: 15000,
+      maxRedirects: 5
+    });
+    
+    const $ = cheerio.load(response.data);
+    
+    const jobData = {
+      title: '',
+      company: '',
+      location: '',
+      description: '',
+      salary: '',
+      requirements: '',
+      contactEmail: '',
+      applicationUrl: url
+    };
+    
+    // Enhanced extraction based on common job site patterns
+    const domain = new URL(url).hostname.toLowerCase();
+    
+    if (domain.includes('linkedin.com')) {
+      // LinkedIn-specific extraction
+      jobData.title = $('h1.top-card-layout__title').text().trim() || 
+                     $('h1[data-test-id="job-title"]').text().trim();
+      jobData.company = $('a.topcard__org-name-link').text().trim() || 
+                       $('.topcard__org-name').text().trim();
+      jobData.location = $('.topcard__flavor--bullet').text().trim();
+      jobData.description = $('.description__text').text().trim();
+      
+    } else if (domain.includes('indeed.com')) {
+      // Indeed-specific extraction
+      jobData.title = $('[data-testid="jobsearch-JobInfoHeader-title"]').text().trim() ||
+                     $('.jobsearch-JobInfoHeader-title').text().trim();
+      jobData.company = $('[data-testid="inlineHeader-companyName"]').text().trim();
+      jobData.location = $('[data-testid="job-location"]').text().trim();
+      jobData.description = $('#jobDescriptionText').text().trim();
+      jobData.salary = $('.icl-u-xs-mr--xs').text().trim();
+      
+    } else if (domain.includes('glassdoor.com')) {
+      // Glassdoor-specific extraction
+      jobData.title = $('[data-test="job-title"]').text().trim();
+      jobData.company = $('[data-test="employer-name"]').text().trim();
+      jobData.location = $('[data-test="job-location"]').text().trim();
+      jobData.description = $('#JobDescriptionContainer').text().trim();
+      
+    } else {
+      // Generic extraction for other sites
+      jobData.title = $('h1').first().text().trim() || 
+                     $('[class*="title"], [id*="title"]').first().text().trim();
+      
+      // Try to find company name in various ways
+      jobData.company = $('[class*="company"], [id*="company"]').first().text().trim() ||
+                       $('meta[property="og:site_name"]').attr('content') || '';
+      
+      // Get the largest text block as description
+      let largestText = '';
+      $('div, section, article, p').each((i, elem) => {
+        const text = $(elem).text().trim();
+        if (text.length > largestText.length && text.length > 100) {
+          largestText = text;
+        }
+      });
+      jobData.description = largestText.substring(0, 3000); // Limit description length
+    }
+    
+    // Extract email if present
+    const fullText = $.text();
+    const emailMatch = fullText.match(/[\w._%+-]+@[\w.-]+\.[A-Z|a-z]{2,}/i);
+    if (emailMatch && !emailMatch[0].includes('noreply') && !emailMatch[0].includes('no-reply')) {
+      jobData.contactEmail = emailMatch[0];
+    }
+    
+    // Clean extracted data
+    Object.keys(jobData).forEach(key => {
+      if (jobData[key] && typeof jobData[key] === 'string') {
+        jobData[key] = jobData[key].replace(/\s+/g, ' ').trim();
+      }
+    });
+    
+    console.log('Extraction results:', {
+      title: jobData.title ? `✓ ${jobData.title.substring(0, 50)}...` : '✗ Not found',
+      company: jobData.company ? `✓ ${jobData.company}` : '✗ Not found',
+      description: jobData.description ? `✓ ${jobData.description.length} chars` : '✗ Not found'
+    });
+    
+    // Check if extraction was successful
+    if (!jobData.title && !jobData.company && jobData.description.length < 100) {
+      throw new Error(`Failed to extract meaningful job data from ${domain}. The site may require authentication or use dynamic loading.`);
+    }
+    
+    return jobData;
+    
+  } catch (error) {
+    console.error('Job extraction failed:', error.message);
+    throw new Error(`Could not extract job data: ${error.message}`);
+  }
+}
 
 // Enhanced job analysis using Gemini AI
 async function analyzeJobWithGemini(jobData) {
@@ -12,7 +124,7 @@ async function analyzeJobWithGemini(jobData) {
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     
     const analysisPrompt = `
-You are an expert job fraud detection system. Analyze this job posting for potential scams or red flags.
+You are an expert job fraud detection system trained on thousands of employment scams. Analyze this job posting for potential fraud indicators.
 
 Job Details:
 - Title: ${jobData.title || 'Not provided'}
@@ -24,77 +136,116 @@ Job Details:
 - Contact Email: ${jobData.contactEmail || 'Not provided'}
 - Application URL: ${jobData.applicationUrl || 'Not provided'}
 
-Please provide a comprehensive fraud analysis in the following JSON format:
+SCAM DETECTION CRITERIA:
+
+**CRITICAL RED FLAGS (High Risk):**
+- Requests for upfront payments (training fees, equipment, background checks)
+- Promises of unrealistic income ("$500/day from home", "unlimited earnings")
+- Vague job descriptions with no specific duties
+- Poor grammar/spelling errors typical of scammers
+- Urgency language ("act now", "limited time", "immediate start")
+- Personal email domains for large corporations
+- Work-from-home with no experience required + high pay
+- Money handling/transfer requests
+- MLM/pyramid scheme language
+
+**WARNING SIGNS (Medium Risk):**
+- Generic job descriptions
+- Missing company details
+- Salary ranges that don't match role complexity
+- Unprofessional communication
+- No clear application process
+- Free email domains for business contact
+
+**LEGITIMACY INDICATORS (Positive Signs):**
+- Detailed job responsibilities
+- Realistic salary expectations
+- Professional company email domain
+- Specific qualifications required
+- Clear company information
+- Professional language and formatting
+
+**EXAMPLES:**
+
+SCAM Example: "Make $500/day working from home! No experience needed! Just pay $99 startup fee. Contact: quickmoney@gmail.com"
+- Risk: CRITICAL (upfront fee, unrealistic income, personal email)
+
+LEGITIMATE Example: "Software Developer at TechCorp Inc. $70K-90K. Requires 3+ years React experience. Apply at careers@techcorp.com"
+- Risk: VERY LOW (realistic salary, specific requirements, professional email)
+
+Provide analysis in this EXACT JSON format:
 {
   "riskScore": <number 0-100>,
   "riskLevel": "<Very Low|Low|Medium|High|Critical>",
   "safetyScore": <number 0-100>,
   "warnings": [
-    "<specific warning messages>"
+    "<specific warning messages with emoji prefixes>"
   ],
   "redFlags": [
-    "<specific red flag descriptions>"
+    "<critical red flag descriptions>"
   ],
   "legitimacyIndicators": [
-    "<positive indicators if any>"
+    "<positive indicators found>"
   ],
   "confidenceScore": <number 0-100>,
-  "reasoning": "<detailed explanation of the analysis>",
-  "scamType": "<type of scam if detected, or 'none'>",
+  "reasoning": "<detailed 2-3 sentence explanation of why you assigned this risk level>",
+  "scamType": "<employment-scam|mlm-scheme|advance-fee|fake-company|phishing|none>",
   "recommendations": [
-    "<specific actionable recommendations>"
-  ]
+    "<specific actionable advice>"
+  ],
+  "fraudProbability": <number 0-100>
 }
 
-Focus on:
-1. Common job scam patterns (upfront payments, unrealistic salaries, vague descriptions)
-2. Language patterns typical of scammers (urgency, poor grammar, generic content)
-3. Company legitimacy indicators
-4. Contact information authenticity
-5. Job posting quality and professionalism
-6. Salary vs. role mismatch
-7. Application process red flags
-
-Be thorough but balanced - don't flag legitimate jobs as scams.
+Be extremely thorough but avoid false positives. A legitimate job with minor issues should not be marked as high risk.
 `;
 
     const result = await model.generateContent(analysisPrompt);
     const response = await result.response;
     const text = response.text();
     
-    // Parse the JSON response
+    // Enhanced JSON parsing with better error handling
     try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      // Try to extract JSON from the response
+      const jsonMatch = text.match(/\{[\s\S]*?\}(?=\s*$|\s*```|\s*\n\n)/);
       if (jsonMatch) {
         const analysis = JSON.parse(jsonMatch[0]);
         
-        // Validate and normalize the response
-        return {
-          safetyScore: Math.max(0, Math.min(100, analysis.safetyScore || 100 - analysis.riskScore)),
+        // Validate required fields and normalize response
+        const normalizedAnalysis = {
+          safetyScore: Math.max(0, Math.min(100, analysis.safetyScore || (100 - (analysis.riskScore || 0)))),
           riskScore: Math.max(0, Math.min(100, analysis.riskScore || 0)),
           riskLevel: analysis.riskLevel || 'Medium',
-          warnings: analysis.warnings || [],
-          redFlags: analysis.redFlags || [],
-          legitimacyIndicators: analysis.legitimacyIndicators || [],
-          confidenceScore: analysis.confidenceScore || 50,
-          reasoning: analysis.reasoning || 'Analysis completed',
+          warnings: Array.isArray(analysis.warnings) ? analysis.warnings : [],
+          redFlags: Array.isArray(analysis.redFlags) ? analysis.redFlags : [],
+          legitimacyIndicators: Array.isArray(analysis.legitimacyIndicators) ? analysis.legitimacyIndicators : [],
+          confidenceScore: Math.max(0, Math.min(100, analysis.confidenceScore || 75)),
+          reasoning: analysis.reasoning || 'AI analysis completed',
           scamType: analysis.scamType || 'none',
-          recommendations: analysis.recommendations || [],
+          recommendations: Array.isArray(analysis.recommendations) ? analysis.recommendations : [],
+          fraudProbability: Math.max(0, Math.min(100, analysis.fraudProbability || analysis.riskScore || 0)),
           aiAnalysis: true
         };
+        
+        // Quality check - if confidence is too low, fall back to rule-based
+        if (normalizedAnalysis.confidenceScore < 40) {
+          console.warn('AI confidence too low, falling back to rule-based analysis');
+          return analyzeJobFallback(jobData);
+        }
+        
+        return normalizedAnalysis;
       }
     } catch (parseError) {
       console.error('Failed to parse Gemini response:', parseError);
-      // Fall back to rule-based analysis
+      console.error('Raw response:', text.substring(0, 500));
       return analyzeJobFallback(jobData);
     }
     
-    // If no JSON found, fall back to rule-based analysis
+    // If no valid JSON found, fall back
+    console.warn('No valid JSON found in AI response, falling back to rule-based analysis');
     return analyzeJobFallback(jobData);
     
   } catch (error) {
     console.error('Gemini AI analysis failed:', error);
-    // Fall back to rule-based analysis
     return analyzeJobFallback(jobData);
   }
 }
@@ -388,8 +539,29 @@ export async function POST(request) {
     let jobData;
     let analysis;
     
-    if (method === 'linkonly' && url) {
-      // URL-only analysis
+    if (method === 'url' && url) {
+      // Full URL extraction and analysis
+      try {
+        jobData = await extractJobDataFromUrl(url);
+        analysis = await analyzeJobWithGemini(jobData);
+      } catch (extractionError) {
+        console.error('URL extraction failed:', extractionError);
+        // Fall back to URL-only analysis
+        analysis = await analyzeURLWithGemini(url);
+        jobData = {
+          title: 'Content Extraction Failed',
+          company: 'Could not extract',
+          location: '',
+          description: `URL analysis only. Extraction failed: ${extractionError.message}`,
+          salary: '',
+          requirements: '',
+          contactEmail: '',
+          applicationUrl: url
+        };
+      }
+      
+    } else if (method === 'linkonly' && url) {
+      // URL-only analysis (no content extraction)
       analysis = await analyzeURLWithGemini(url);
       
       jobData = {
