@@ -41,37 +41,41 @@ export async function POST(req) {
         geminiAI = await analyzeJobWithAI(jobData);
         if (geminiAI?.analysis) {
           text = geminiAI.analysis;
-          text = text.replace(/\n{3,}/g, '\n\n').replace(/[ \t]+\n/g, '\n').trim();
-          let verdictMatch = text.match(/\b(LEGITIMATE|SUSPICIOUS|FRAUDULENT)\b/i);
-          verdict = verdictMatch ? verdictMatch[1].toUpperCase() : null;
-          let lines = text.split('\n');
-          let verdictLineIdx = lines.findIndex(line => /\b(LEGITIMATE|SUSPICIOUS|FRAUDULENT)\b/i.test(line));
-          if (verdictLineIdx !== -1) {
-            let summaryLines = [];
-            for (let i = verdictLineIdx + 1; i < lines.length && summaryLines.length < 3; i++) {
-              if (lines[i].trim()) summaryLines.push(lines[i].trim());
-            }
-            summary = summaryLines.join(' ');
-          }
-          if (!summary || summary.length < 10) {
-            let summaryLines = [];
-            for (let i = 0; i < lines.length && summaryLines.length < 3; i++) {
-              if (lines[i].trim()) summaryLines.push(lines[i].trim());
-            }
-            summary = summaryLines.join(' ');
-          }
+          verdict = geminiAI.verdict || null;
+          summary = geminiAI.summary || null;
         }
       } catch (e) {
         console.warn('Gemini AI analysis for manual job failed:', e.message);
       }
 
+      // Classic analysis
+      const classic = analyzeJob(jobData);
+
       analysisResult = {
         job: {
           ...jobData,
-          geminiVerdict: verdict,
-          geminiSummary: summary,
-          geminiAnalysis: text // full, cleaned Gemini analysis
-        }
+          classicAnalysis: {
+            safetyScore: classic.safetyScore,
+            riskScore: classic.riskScore,
+            riskLevel: classic.riskLevel,
+            redFlags: classic.warnings,
+            greenFlags: classic.greenFlags,
+            recommendations: classic.recommendations
+          },
+          aiAnalysis: geminiAI ? {
+            verdict: geminiAI.verdict,
+            confidence: geminiAI.confidence,
+            summary: geminiAI.summary,
+            redFlags: geminiAI.red_flags,
+            greenFlags: geminiAI.green_flags,
+            companyAnalysis: geminiAI.company_analysis,
+            jobDescriptionAnalysis: geminiAI.job_description_analysis,
+            contactAnalysis: geminiAI.contact_analysis,
+            otherNotes: geminiAI.other_notes,
+            raw: geminiAI.analysis
+          } : null
+        },
+        professionalSummary: generateProfessionalSummary(classic, geminiAI)
       };
     } else if (method === 'linkonly') {
       // For link-only, run classic analysis and return results
@@ -87,8 +91,8 @@ export async function POST(req) {
     } else {
       throw new Error('Invalid analysis method');
     }
-    
-    return NextResponse.json(analysisResult);
+
+    return NextResponse.json({ ...analysisResult, method });
   } catch (error) {
     console.error('Analysis error:', error);
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -126,6 +130,7 @@ function generateRecommendations(warnings, safetyScore, riskLevel) {
 // Core job analysis function
 export function analyzeJob(jobData) {
   const warnings = [];
+  const greenFlags = [];
   let riskScore = 0;
 
   // Normalize data
@@ -147,6 +152,8 @@ export function analyzeJob(jobData) {
   if (foundCriticalPhrases.length > 0) {
     warnings.push(`🚨 Contains common scam phrases: ${foundCriticalPhrases.slice(0, 2).join(', ')}`);
     riskScore += foundCriticalPhrases.length * 40;
+  } else {
+    greenFlags.push('No common scam phrases detected.');
   }
 
   // 2. High-pressure tactics
@@ -159,6 +166,8 @@ export function analyzeJob(jobData) {
   if (foundHighPressure.length > 0) {
     warnings.push(`⚠️ Uses high-pressure language: ${foundHighPressure.slice(0, 2).join(', ')}`);
     riskScore += foundHighPressure.length * 25;
+  } else {
+    greenFlags.push('No high-pressure or urgent language detected.');
   }
 
   // 3. Email analysis
@@ -173,6 +182,8 @@ export function analyzeJob(jobData) {
     if (freeEmailDomains.includes(domain) && company.includes('corp')) {
       warnings.push('⚠️ Large company using personal email instead of business email');
       riskScore += 30;
+    } else if (!freeEmailDomains.includes(domain)) {
+      greenFlags.push('Contact email uses a business domain.');
     }
   }
 
@@ -184,18 +195,24 @@ export function analyzeJob(jobData) {
     if (url.includes('blogspot') || url.includes('wordpress.com') || url.includes('wix')) {
       warnings.push('⚠️ Job posted on free website platform');
       riskScore += 35;
+    } else {
+      greenFlags.push('Job not posted on a free website platform.');
     }
 
     // Shortened URLs
     if (url.includes('bit.ly') || url.includes('tinyurl') || url.includes('t.co')) {
       warnings.push('🚨 Uses shortened/hidden web address - major red flag');
       riskScore += 50;
+    } else {
+      greenFlags.push('No shortened or hidden web address detected.');
     }
 
     // Non-HTTPS
     if (url.startsWith('http://')) {
       warnings.push('⚠️ Website is not secure (no HTTPS)');
       riskScore += 20;
+    } else if (url.startsWith('https://')) {
+      greenFlags.push('Website uses secure HTTPS connection.');
     }
   }
 
@@ -220,6 +237,8 @@ export function analyzeJob(jobData) {
         warnings.push('⚠️ Hourly wage seems unusually high');
         riskScore += 30;
       }
+    } else {
+      greenFlags.push('Salary/compensation appears realistic.');
     }
   }
 
@@ -232,6 +251,8 @@ export function analyzeJob(jobData) {
   if (missingInfo.length > 1) {
     warnings.push(`Missing key information: ${missingInfo.join(', ')}`);
     riskScore += missingInfo.length * 25;
+  } else {
+    greenFlags.push('All key job information is present.');
   }
 
   // 7. Generic content check
@@ -244,6 +265,8 @@ export function analyzeJob(jobData) {
   if (foundGeneric.length > 4) {
     warnings.push('Job description is very generic');
     riskScore += 20;
+  } else {
+    greenFlags.push('Job description is specific and detailed.');
   }
 
   // Calculate final scores
@@ -263,8 +286,141 @@ export function analyzeJob(jobData) {
     riskScore,
     riskLevel,
     warnings,
+    greenFlags,
     recommendations: generateRecommendations(warnings, safetyScore, riskLevel)
   };
+}
+
+// Professional summary generator for frontend display
+function generateProfessionalSummary(classic, geminiAI) {
+  let summary = '';
+  if (classic.riskLevel === 'Very Low') {
+    summary += '✅ This job posting appears to be legitimate based on our automated checks.';
+    if (classic.greenFlags && classic.greenFlags.length > 0) {
+      summary += '\n\n**Positive signals:**\n- ' + classic.greenFlags.join('\n- ');
+    }
+  } else {
+    summary += '⚠️ This job posting has some risk factors:';
+    if (classic.warnings && classic.warnings.length > 0) {
+      summary += '\n\n**Red flags:**\n- ' + classic.warnings.join('\n- ');
+    }
+  }
+  if (geminiAI && geminiAI.verdict) {
+    summary += `\n\n**Gemini AI verdict:** ${geminiAI.verdict}`;
+    if (geminiAI.summary) {
+      summary += `\n${geminiAI.summary}`;
+    }
+    if (geminiAI.red_flags && geminiAI.red_flags.length > 0) {
+      summary += '\n\n**AI-identified red flags:**\n- ' + geminiAI.red_flags.join('\n- ');
+    }
+    if (geminiAI.green_flags && geminiAI.green_flags.length > 0) {
+      summary += '\n\n**AI-identified positive signals:**\n- ' + geminiAI.green_flags.join('\n- ');
+    }
+  }
+  return summary.trim();
+}
+
+// Gemini AI analysis with structured prompt and robust JSON parsing
+export async function analyzeJobWithAI(jobData) {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) return null;
+  
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+  const prompt = `You are an expert fraud detection agent for online job listings. Analyze the provided job details and return your findings in the following JSON format:
+
+{
+  "verdict": "LEGITIMATE | SUSPICIOUS | FRAUDULENT",
+  "confidence": "0-100",
+  "summary": "A concise summary of your reasoning.",
+  "red_flags": ["List specific red flags with evidence from the job data."],
+  "green_flags": ["List specific positive signals with evidence from the job data."],
+  "company_analysis": "Is the company real, established, and reputable? Reference any evidence.",
+  "job_description_analysis": "Is the job description realistic and detailed? Reference any evidence.",
+  "contact_analysis": "Is the contact information professional and matching the company domain?",
+  "other_notes": "Any other relevant observations."
+}
+
+Here are the job details:
+Title: ${jobData.title}
+Company: ${jobData.company}
+Location: ${jobData.location || 'N/A'}
+Job Type: ${jobData.jobType || 'N/A'}
+Experience Level: ${jobData.experienceLevel || 'N/A'}
+Salary/Compensation: ${jobData.salary || 'N/A'}
+Company Size: ${jobData.companySize || 'N/A'}
+Posted Date: ${jobData.postedDate || 'N/A'}
+Application Deadline: ${jobData.applicationDeadline || 'N/A'}
+Source URL: ${jobData.applicationUrl || 'N/A'}
+
+Job Description:
+${jobData.description}
+
+Requirements:
+${jobData.requirements || 'N/A'}
+
+Qualifications:
+${jobData.qualifications || 'N/A'}
+
+Benefits:
+${jobData.benefits || 'N/A'}
+
+Contact Info:
+${jobData.contactEmail || 'N/A'}
+
+Application Instructions:
+${jobData.applicationInstructions || 'N/A'}
+
+Be as specific as possible, reference the job data directly, and do not provide generic statements. Only output valid JSON.`;
+  
+  try {
+    const body = {
+      contents: [{ parts: [{ text: prompt }] }]
+    };
+    const response = await axios.post(endpoint, body, {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 30000
+    });
+    
+    const raw = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let parsed = null;
+    try {
+      // Find the first JSON object in the response (in case Gemini adds text before/after)
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+    } catch (jsonErr) {
+      // Parsing failed, fallback to raw text
+      parsed = null;
+    }
+    if (parsed) {
+      return {
+        analysis: raw,
+        hasContent: true,
+        verdict: parsed.verdict,
+        confidence: parsed.confidence,
+        summary: parsed.summary,
+        red_flags: parsed.red_flags,
+        green_flags: parsed.green_flags,
+        company_analysis: parsed.company_analysis,
+        job_description_analysis: parsed.job_description_analysis,
+        contact_analysis: parsed.contact_analysis,
+        other_notes: parsed.other_notes
+      };
+    } else {
+      return {
+        analysis: raw,
+        hasContent: raw.length > 0
+      };
+    }
+  } catch (error) {
+    console.error('Gemini AI analysis error:', error.message);
+    if (error.response) {
+      console.error('Gemini API response status:', error.response.status);
+      console.error('Gemini API response data:', error.response.data);
+    }
+    return null;
+  }
 }
 
 // Enhanced URL analysis with Gemini AI integration
@@ -274,6 +430,8 @@ async function analyzeURL(url) {
   let domain = 'unknown';
   let geminiAnalysis = null; // Declare outside try block
 
+  let isLegitimate = false;
+
   try {
     const urlObj = new URL(url);
     domain = urlObj.hostname.toLowerCase();
@@ -282,7 +440,7 @@ async function analyzeURL(url) {
     const legitimateJobBoards = [
       'linkedin.com', 'indeed.com', 'glassdoor.com', 'monster.com', 'ziprecruiter.com'
     ];
-    const isLegitimate = legitimateJobBoards.some(board => domain.includes(board));
+    isLegitimate = legitimateJobBoards.some(board => domain.includes(board));
     if (isLegitimate) {
       warnings.push('✅ Posted on legitimate job board');
       // Always set perfect safety score for major job boards
@@ -389,79 +547,6 @@ async function analyzeURL(url) {
     }
   };
 }
-// Analyze job content with Gemini AI (for extension data)
-export async function analyzeJobWithAI(jobData) {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) return null;
-  
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-  const prompt = `Act as a fraud detection agent for online job listings. Analyze the provided job details and determine if the job is LEGITIMATE, SUSPICIOUS, or FRAUDULENT. Consider the following:
-
-- Company history and reputation (is the company real, established, and does it have a positive track record?)
-- Recent job postings by this company (is this job consistent with their usual postings?)
-- Job description realism (are the requirements, salary, and benefits realistic for the role and location?)
-- Contact information (is the email or application URL professional and matches the company domain?)
-- Any red flags (unusual requests, poor grammar, urgent language, etc.)
-- Any positive signals (well-written, matches company style, verifiable details, etc.)
-
-Here are the job details:
-Title: ${jobData.title}
-Company: ${jobData.company}
-Location: ${jobData.location || 'N/A'}
-Job Type: ${jobData.jobType || 'N/A'}
-Experience Level: ${jobData.experienceLevel || 'N/A'}
-Salary/Compensation: ${jobData.salary || 'N/A'}
-Company Size: ${jobData.companySize || 'N/A'}
-Posted Date: ${jobData.postedDate || 'N/A'}
-Application Deadline: ${jobData.applicationDeadline || 'N/A'}
-Source URL: ${jobData.applicationUrl || 'N/A'}
-
-Job Description:
-${jobData.description}
-
-Requirements:
-${jobData.requirements || 'N/A'}
-
-Qualifications:
-${jobData.qualifications || 'N/A'}
-
-Benefits:
-${jobData.benefits || 'N/A'}
-
-Contact Info:
-${jobData.contactEmail || 'N/A'}
-
-Application Instructions:
-${jobData.applicationInstructions || 'N/A'}
-
----
-
-Provide a clear verdict (LEGITIMATE, SUSPICIOUS, or FRAUDULENT) and a concise summary explaining your reasoning, referencing the above factors. Be specific about any red or green flags, and mention if the company or job appears consistent with real-world data or not.`;
-  
-  try {
-    const body = {
-      contents: [{ parts: [{ text: prompt }] }]
-    };
-    const response = await axios.post(endpoint, body, {
-      headers: { 'Content-Type': 'application/json' },
-      timeout: 30000
-    });
-    
-    const analysis = response.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    
-    return {
-      analysis: analysis,
-      hasContent: analysis.length > 0
-    };
-  } catch (error) {
-    console.error('Gemini AI analysis error:', error.message);
-    if (error.response) {
-      console.error('Gemini API response status:', error.response.status);
-      console.error('Gemini API response data:', error.response.data);
-    }
-    return null;
-  }
-}
 
 // Gemini API integration (for URL analysis)
 async function analyzeWithGemini(jobUrl) {
@@ -529,6 +614,7 @@ Respond with detailed findings for each section above, highlighting specific red
 }
 
 // URLScan.io integration
+// Note: urlscan.io public API does NOT require an API key for basic scans.
 async function scanURLWithURLScan(url) {
   try {
     // Submit URL for scanning (public endpoint, no API key)
@@ -577,24 +663,20 @@ async function scanURLWithURLScan(url) {
     }
 
     // Check domain age
-    if (result.page?.domain) {
-      const domainInfo = result.page.domain;
-      if (domainInfo.creation_date) {
-        const creationDate = new Date(domainInfo.creation_date);
-        const daysSinceCreation = (Date.now() - creationDate.getTime()) / (1000 * 60 * 60 * 24);
-        analysis.newDomain = daysSinceCreation < 30; // Less than 30 days old
+    if (result.page && result.page.domainAgeDays !== undefined) {
+      if (result.page.domainAgeDays < 30) {
+        analysis.newDomain = true;
       }
     }
 
-    console.log('URLScan.io analysis result:', analysis);
     return analysis;
-
   } catch (error) {
-    console.error('URLScan.io API error:', error.message);
-    // If rate limited or temporary error, return neutral result
-    if (error.response?.status === 429) {
-      console.warn('URLScan.io rate limit reached');
-    }
-    throw error;
+    console.warn('URLScan.io analysis failed:', error.message);
+    return {
+      malicious: false,
+      suspicious: false,
+      phishing: false,
+      newDomain: false
+    };
   }
 }
