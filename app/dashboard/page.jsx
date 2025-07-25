@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link2, FileText, AlertTriangle, CheckCircle, Globe, Briefcase, Shield, XCircle, RefreshCw } from 'lucide-react';
 
@@ -20,15 +20,6 @@ function DashboardHome() {
     applicationUrl: ''
   });
 
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('spotghost_analysis_result');
-      if (stored) {
-        setAnalysisResult(JSON.parse(stored));
-      }
-    } catch (e) {}
-  }, []);
-
   const handleUrlAnalysis = async () => {
     if (!jobUrl.trim()) return;
     setIsAnalyzing(true);
@@ -39,7 +30,6 @@ function DashboardHome() {
       if (inputMethod === 'linkonly') {
         method = 'linkonly';
       } else if (inputMethod === 'link') {
-        // Check if LinkedIn URL
         if (/linkedin\.com\/jobs\/view\//i.test(jobUrl)) {
           method = 'linkedin';
         } else {
@@ -54,9 +44,6 @@ function DashboardHome() {
       const result = await response.json();
       if (response.ok) {
         setAnalysisResult(result);
-        try {
-          localStorage.setItem('spotghost_analysis_result', JSON.stringify(result));
-        } catch (e) {}
       } else {
         setError(result.error || 'Failed to analyze job listing');
       }
@@ -81,9 +68,6 @@ function DashboardHome() {
       const result = await response.json();
       if (response.ok) {
         setAnalysisResult(result);
-        try {
-          localStorage.setItem('spotghost_analysis_result', JSON.stringify(result));
-        } catch (e) {}
       } else {
         setError(result.error || 'Failed to analyze job listing');
       }
@@ -450,17 +434,7 @@ function DashboardHome() {
           {/* MANUAL/EXTENSION: Full classic/AI analysis and summary */}
           {analysisResult.job && analysisResult.job.classicAnalysis && (
             <>
-              {analysisResult.professionalSummary && (
-                <div className="bg-gradient-to-r from-emerald-500/10 to-cyan-500/10 border border-emerald-500/30 rounded-xl p-6 mb-6">
-                  <h3 className="text-xl font-semibold text-emerald-300 mb-4 flex items-center">
-                    <span className="mr-2">📋</span>
-                    Summary
-                  </h3>
-                  <div className="text-gray-200 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-900/50 rounded-lg p-4 border border-gray-600">
-                    {analysisResult.professionalSummary}
-                  </div>
-                </div>
-              )}
+              {/* Classic Analysis Section */}
               <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-6 mb-6">
                 <h3 className="text-xl font-semibold text-green-300 mb-4 flex items-center">
                   <span className="mr-2">🛡️</span>
@@ -497,12 +471,17 @@ function DashboardHome() {
                   <span>Classic SpotGhost analysis</span>
                 </div>
               </div>
+
+              {/* AI Analysis Section (Advisory) */}
               {analysisResult.job.aiAnalysis && (
                 <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6">
                   <h3 className="text-xl font-semibold text-purple-300 mb-4 flex items-center">
                     <span className="mr-2">🤖</span>
-                    Gemini AI Analysis
+                    Gemini AI Analysis <span className="ml-2 text-xs text-purple-200">(Advisory)</span>
                   </h3>
+                  <div className="text-purple-200 text-xs mb-2">
+                    The following AI analysis is advisory and may not be 100% accurate. Always use your own judgment and verify job details independently.
+                  </div>
                   <div className="text-gray-200 text-lg font-bold mb-2">
                     Verdict: <span className={
                       analysisResult.job.aiAnalysis.verdict === 'LEGITIMATE' ? 'text-green-400' :
@@ -558,13 +537,6 @@ function DashboardHome() {
                       <strong>Other Notes:</strong> {analysisResult.job.aiAnalysis.otherNotes}
                     </div>
                   )}
-                  {analysisResult.job.aiAnalysis.raw && (
-                    <GeminiAnalysisSection analysis={analysisResult.job.aiAnalysis.raw} />
-                  )}
-                  <div className="mt-4 text-xs text-purple-400 flex items-center">
-                    <span className="mr-2">⚡</span>
-                    <span>Analysis powered by Gemini AI - Real-time fraud detection</span>
-                  </div>
                 </div>
               )}
             </>
@@ -592,23 +564,3 @@ function DashboardHome() {
 }
 
 export default DashboardHome;
-
-function GeminiAnalysisSection({ analysis }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div className="mt-6">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="text-purple-300 underline text-sm font-semibold mb-2 focus:outline-none"
-        aria-expanded={open}
-      >
-        {open ? 'Hide Full AI Analysis' : 'Show Full AI Analysis'}
-      </button>
-      {open && (
-        <div className="whitespace-pre-wrap bg-gray-950/80 border border-purple-700 rounded-lg p-4 text-sm text-gray-200 mt-2 font-mono overflow-x-auto" style={{ maxHeight: 400, overflowY: 'auto' }}>
-          {analysis}
-        </div>
-      )}
-    </div>
-  );
-}
