@@ -1,100 +1,712 @@
 <!DOCTYPE html>
-<html><head>
-<style>
-  body { 
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-    padding: 16px; 
-    width: 320px; 
-    margin: 0;
-    background: #f8f9fa;
-  }
-  
-  .header {
-    text-align: center;
-    margin-bottom: 16px;
-  }
-  
-  .logo {
-    font-size: 24px;
-    font-weight: bold;
-    color: #000;
-    margin-bottom: 4px;
-  }
-  
-  .subtitle {
-    font-size: 12px;
-    color: #666;
-    margin: 0;
-  }
-  
-  button { 
-    width: 100%;
-    padding: 12px 16px; 
-    background: linear-gradient(135deg, #000 0%, #333 100%);
-    color: #fff; 
-    border: none; 
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    transition: all 0.2s ease;
-    margin-bottom: 12px;
-  }
-  
-  button:hover:not(:disabled) {
-    background: linear-gradient(135deg, #333 0%, #555 100%);
-    transform: translateY(-1px);
-  }
-  
-  button:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-    transform: none;
-  }
-  
-  #status { 
-    margin-top: 12px; 
-    font-size: 13px;
-    line-height: 1.4;
-    padding: 12px;
-    background: white;
-    border-radius: 6px;
-    border-left: 3px solid #007bff;
-    min-height: 20px;
-  }
-  
-  .warning {
-    border-left-color: #ffc107 !important;
-  }
-  
-  .error {
-    border-left-color: #dc3545 !important;
-  }
-  
-  .success {
-    border-left-color: #28a745 !important;
-  }
-  
-  .footer {
-    text-align: center;
-    margin-top: 12px;
-    font-size: 11px;
-    color: #888;
-  }
-</style>
-</head><body>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SpotGhost - Job Scam Detector</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      width: 400px;
+      min-height: 500px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #10b981, #06b6d4);
+      padding: 20px;
+      text-align: center;
+      color: white;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grain" width="100" height="100" patternUnits="userSpaceOnUse"><circle cx="50" cy="50" r="1" fill="white" opacity="0.1"/></pattern></defs><rect width="100" height="100" fill="url(%23grain)"/></svg>');
+      opacity: 0.1;
+    }
+
+    .logo {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 5px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .tagline {
+      font-size: 14px;
+      opacity: 0.9;
+      position: relative;
+      z-index: 1;
+    }
+
+    .main-content {
+      background: white;
+      min-height: 400px;
+    }
+
+    .tabs {
+      display: flex;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .tab {
+      flex: 1;
+      padding: 15px 10px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+      color: #64748b;
+      transition: all 0.3s ease;
+      border-bottom: 3px solid transparent;
+    }
+
+    .tab:hover {
+      background: #f1f5f9;
+      color: #475569;
+    }
+
+    .tab.active {
+      color: #10b981;
+      border-bottom-color: #10b981;
+      background: white;
+    }
+
+    .tab-content {
+      display: none;
+      padding: 20px;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .analyze-section {
+      text-align: center;
+      margin-bottom: 25px;
+    }
+
+    .platform-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #f0fdf4;
+      color: #166534;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 15px;
+      border: 1px solid #bbf7d0;
+    }
+
+    .platform-indicator.unsupported {
+      background: #fef2f2;
+      color: #991b1b;
+      border-color: #fecaca;
+    }
+
+    .analyze-btn {
+      background: linear-gradient(135deg, #10b981, #06b6d4);
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      border-radius: 25px;
+      font-weight: 700;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+      width: 100%;
+    }
+
+    .analyze-btn:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+    }
+
+    .analyze-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .analyze-btn.loading {
+      position: relative;
+      color: transparent;
+    }
+
+    .analyze-btn.loading::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 20px;
+      height: 20px;
+      border: 2px solid #ffffff40;
+      border-top: 2px solid #ffffff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: translate(-50%, -50%) rotate(0deg); }
+      100% { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    .status {
+      margin-top: 15px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.4;
+      text-align: center;
+    }
+
+    .status.success {
+      background: #f0fdf4;
+      color: #166534;
+      border: 1px solid #bbf7d0;
+    }
+
+    .status.error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .status.info {
+      background: #eff6ff;
+      color: #1e40af;
+      border: 1px solid #bfdbfe;
+    }
+
+    .results-section {
+      margin-top: 20px;
+    }
+
+    .risk-score {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .score-circle {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      color: white;
+      position: relative;
+    }
+
+    .score-high { background: linear-gradient(135deg, #10b981, #059669); }
+    .score-medium { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .score-low { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+    .risk-info h3 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+
+    .risk-level {
+      padding: 4px 12px;
+      border-radius: 15px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .risk-very-low { background: #d1fae5; color: #065f46; }
+    .risk-low { background: #fef3c7; color: #92400e; }
+    .risk-medium { background: #fed7aa; color: #c2410c; }
+    .risk-high { background: #fecaca; color: #dc2626; }
+    .risk-critical { background: #fca5a5; color: #991b1b; }
+
+    .flags-section {
+      margin-top: 20px;
+    }
+
+    .flags-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .red-flags { color: #dc2626; }
+    .green-flags { color: #059669; }
+
+    .flag-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .flag-item {
+      padding: 8px 12px;
+      margin-bottom: 6px;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .flag-item.red {
+      background: #fef2f2;
+      color: #991b1b;
+      border-left: 3px solid #ef4444;
+    }
+
+    .flag-item.green {
+      background: #f0fdf4;
+      color: #166534;
+      border-left: 3px solid #10b981;
+    }
+
+    .settings-section {
+      padding: 0;
+    }
+
+    .setting-group {
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+
+    .setting-group:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+    }
+
+    .setting-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .setting-description {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 10px;
+      line-height: 1.4;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 50px;
+      height: 24px;
+      background: #cbd5e1;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background 0.3s ease;
+    }
+
+    .toggle-switch.active {
+      background: #10b981;
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      transition: transform 0.3s ease;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
+    .toggle-switch.active::after {
+      transform: translateX(26px);
+    }
+
+    .stats-section {
+      padding: 0;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    .stat-card {
+      background: #f8fafc;
+      padding: 15px;
+      border-radius: 10px;
+      text-align: center;
+      border: 1px solid #e2e8f0;
+    }
+
+    .stat-number {
+      font-size: 24px;
+      font-weight: 800;
+      color: #10b981;
+      margin-bottom: 5px;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .recent-scans {
+      margin-top: 20px;
+    }
+
+    .recent-scans h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #374151;
+    }
+
+    .scan-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px;
+      background: #f8fafc;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-size: 12px;
+    }
+
+    .scan-info {
+      flex: 1;
+    }
+
+    .scan-company {
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .scan-time {
+      color: #64748b;
+      font-size: 11px;
+    }
+
+    .scan-score {
+      padding: 3px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 11px;
+    }
+
+    .footer {
+      background: #f8fafc;
+      padding: 15px 20px;
+      border-top: 1px solid #e2e8f0;
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 10px;
+    }
+
+    .footer-link {
+      color: #64748b;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 500;
+      transition: color 0.3s ease;
+    }
+
+    .footer-link:hover {
+      color: #10b981;
+    }
+
+    .version {
+      font-size: 11px;
+      color: #94a3b8;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #64748b;
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 15px;
+      opacity: 0.5;
+    }
+
+    .empty-state h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #374151;
+    }
+
+    .empty-state p {
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .btn-secondary {
+      background: #f1f5f9;
+      color: #475569;
+      border: 1px solid #cbd5e1;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      flex: 1;
+    }
+
+    .btn-secondary:hover {
+      background: #e2e8f0;
+      border-color: #94a3b8;
+    }
+
+    .premium-banner {
+      background: linear-gradient(135deg, #fbbf24, #f59e0b);
+      color: white;
+      padding: 12px;
+      margin: 15px -20px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .premium-banner a {
+      color: white;
+      text-decoration: underline;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body>
   <div class="header">
-    <div class="logo">SpotGhost</div>
-    <p class="subtitle">LinkedIn Job Scam Detector</p>
+    <div class="logo">🛡️ SpotGhost</div>
+    <div class="tagline">Universal Job Scam Protection</div>
   </div>
-  
-  <button id="extractBtn">Analyze This Job</button>
-  
-  <div id="status">Click the button to analyze the current LinkedIn job posting for potential scams and red flags.</div>
-  
+
+  <div class="main-content">
+    <div class="tabs">
+      <div class="tab active" data-tab="analyze">Analyze</div>
+      <div class="tab" data-tab="settings">Settings</div>
+      <div class="tab" data-tab="stats">Stats</div>
+    </div>
+
+    <!-- Analyze Tab -->
+    <div class="tab-content active" id="analyze-tab">
+      <div class="analyze-section">
+        <div class="platform-indicator" id="platform-indicator">
+          <span id="platform-icon">🌐</span>
+          <span id="platform-name">Detecting platform...</span>
+        </div>
+        
+        <button class="analyze-btn" id="analyze-btn">
+          🔍 Analyze This Job
+        </button>
+        
+        <div class="status" id="status" style="display: none;"></div>
+      </div>
+
+      <div class="results-section" id="results-section" style="display: none;">
+        <div class="risk-score">
+          <div class="score-circle" id="score-circle">
+            <span id="safety-score">0</span>
+          </div>
+          <div class="risk-info">
+            <h3>Safety Score</h3>
+            <div class="risk-level" id="risk-level">Unknown</div>
+          </div>
+        </div>
+
+        <div class="flags-section" id="red-flags-section" style="display: none;">
+          <div class="flags-header red-flags">
+            <span>⚠️</span>
+            <span>Red Flags</span>
+          </div>
+          <ul class="flag-list" id="red-flags-list"></ul>
+        </div>
+
+        <div class="flags-section" id="green-flags-section" style="display: none;">
+          <div class="flags-header green-flags">
+            <span>✅</span>
+            <span>Positive Signals</span>
+          </div>
+          <ul class="flag-list" id="green-flags-list"></ul>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn-secondary" id="report-btn">Report Scam</button>
+          <button class="btn-secondary" id="details-btn">View Details</button>
+        </div>
+      </div>
+
+      <div class="empty-state" id="empty-state">
+        <div class="empty-state-icon">🛡️</div>
+        <h3>Ready to Protect You</h3>
+        <p>Navigate to any job posting and click "Analyze This Job" to check for scams and red flags.</p>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div class="tab-content" id="settings-tab">
+      <div class="settings-section">
+        <div class="setting-group">
+          <div class="setting-label">
+            <span>Real-time Analysis</span>
+            <div class="toggle-switch active" id="realtime-toggle"></div>
+          </div>
+          <div class="setting-description">
+            Automatically scan job pages for red flags as you browse
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">
+            <span>Notifications</span>
+            <div class="toggle-switch active" id="notifications-toggle"></div>
+          </div>
+          <div class="setting-description">
+            Show desktop notifications for high-risk jobs
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">
+            <span>Auto-scan</span>
+            <div class="toggle-switch active" id="autoscan-toggle"></div>
+          </div>
+          <div class="setting-description">
+            Automatically analyze jobs when you visit job pages
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">
+            <span>Advanced AI Analysis</span>
+            <div class="toggle-switch" id="ai-toggle"></div>
+          </div>
+          <div class="setting-description">
+            Use advanced AI for deeper analysis (requires premium)
+          </div>
+        </div>
+      </div>
+
+      <div class="premium-banner">
+        ✨ Upgrade to Premium for advanced AI analysis, unlimited scans, and priority support!
+        <a href="#" id="upgrade-link">Learn More</a>
+      </div>
+    </div>
+
+    <!-- Stats Tab -->
+    <div class="tab-content" id="stats-tab">
+      <div class="stats-section">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-number" id="total-scans">0</div>
+            <div class="stat-label">Total Scans</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="scams-blocked">0</div>
+            <div class="stat-label">Scams Blocked</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="platforms-supported">15+</div>
+            <div class="stat-label">Platforms</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-number" id="time-saved">0h</div>
+            <div class="stat-label">Time Saved</div>
+          </div>
+        </div>
+
+        <div class="recent-scans">
+          <h4>Recent Scans</h4>
+          <div id="recent-scans-list">
+            <div class="empty-state">
+              <div class="empty-state-icon">📊</div>
+              <h3>No Scans Yet</h3>
+              <p>Your scan history will appear here once you start analyzing jobs.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="footer">
-    Navigate to a LinkedIn job page first
+    <div class="footer-links">
+      <a href="#" class="footer-link" id="website-link">Website</a>
+      <a href="#" class="footer-link" id="support-link">Support</a>
+      <a href="#" class="footer-link" id="feedback-link">Feedback</a>
+    </div>
+    <div class="version">SpotGhost v2.0.0</div>
   </div>
-  
+
   <script src="popup.js"></script>
-</body></html>
+</body>
+</html>

@@ -30,11 +30,7 @@ function DashboardHome() {
       if (inputMethod === 'linkonly') {
         method = 'linkonly';
       } else if (inputMethod === 'link') {
-        if (/linkedin\.com\/jobs\/view\//i.test(jobUrl)) {
-          method = 'linkedin';
-        } else {
-          method = 'url';
-        }
+        method = 'link';
       }
       const response = await fetch('/api/jobs/analyze', {
         method: 'POST',

@@ -83,6 +83,12 @@ export async function POST(req) {
     } else if (method === 'link') {
       // For auto-fill URL, prompt user to use extension for full AI analysis
       analysisResult = {
+        job: {
+          title: 'Extension Required',
+          company: 'SpotGhost',
+          description: 'Please use the SpotGhost browser extension for full analysis',
+          extensionPrompt: true
+        },
         message: 'Please use the SpotGhost extension to extract job details for a full AI-powered analysis.'
       };
     } else if (method === 'linkedin' || method === 'url') {
