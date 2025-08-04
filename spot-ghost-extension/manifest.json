@@ -1,28 +1,75 @@
 {
   "manifest_version": 3,
-  "name": "SpotGhost - LinkedIn Job Scam Detector",
-  "version": "1.1.0",
-  "description": "Analyze LinkedIn job postings for scams and red flags using AI-powered detection",
-  "permissions": ["scripting", "activeTab"],
-  "host_permissions": [
-    "https://www.linkedin.com/jobs/view/*",
-    "https://www.linkedin.com/jobs/search/*",
-    "http://localhost:3000/*"
+  "name": "SpotGhost - Universal Job Scam Detector",
+  "version": "2.0.0",
+  "description": "AI-powered job scam detection across LinkedIn, Indeed, Glassdoor, Monster, and more. Protect yourself from fraudulent job postings.",
+  "permissions": [
+    "scripting", 
+    "activeTab", 
+    "storage", 
+    "notifications",
+    "background"
   ],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://www.indeed.com/*",
+    "https://www.glassdoor.com/*",
+    "https://www.monster.com/*",
+    "https://www.ziprecruiter.com/*",
+    "https://jobs.google.com/*",
+    "https://www.careerbuilder.com/*",
+    "https://www.simplyhired.com/*",
+    "https://www.dice.com/*",
+    "https://stackoverflow.com/jobs/*",
+    "https://angel.co/*",
+    "https://wellfound.com/*",
+    "https://remote.co/*",
+    "https://remoteok.io/*",
+    "https://weworkremotely.com/*",
+    "https://flexjobs.com/*",
+    "https://upwork.com/*",
+    "https://www.freelancer.com/*",
+    "https://www.fiverr.com/*",
+    "http://localhost:3000/*",
+    "https://*.spotghost.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "action": {
     "default_popup": "popup.html",
-    "default_title": "SpotGhost Job Analyzer"
+    "default_title": "SpotGhost - Analyze This Job"
   },
   "content_scripts": [
     {
       "matches": [
-        "https://www.linkedin.com/jobs/view/*",
-        "https://www.linkedin.com/jobs/search/*"
+        "https://www.linkedin.com/jobs/*",
+        "https://www.indeed.com/viewjob*",
+        "https://www.indeed.com/jobs*",
+        "https://www.glassdoor.com/job-listing/*",
+        "https://www.glassdoor.com/Jobs/*",
+        "https://www.monster.com/job-openings/*",
+        "https://www.ziprecruiter.com/jobs/*",
+        "https://jobs.google.com/jobs*",
+        "https://www.careerbuilder.com/job/*",
+        "https://www.simplyhired.com/job/*",
+        "https://www.dice.com/jobs/detail/*",
+        "https://stackoverflow.com/jobs/*",
+        "https://angel.co/company/*/jobs/*",
+        "https://wellfound.com/company/*/jobs/*",
+        "https://remote.co/job/*",
+        "https://remoteok.io/remote-jobs/*",
+        "https://weworkremotely.com/remote-jobs/*",
+        "https://flexjobs.com/jobs/*",
+        "https://upwork.com/freelance-jobs/*",
+        "https://www.freelancer.com/projects/*",
+        "https://www.fiverr.com/gigs/*"
       ],
       "js": ["content.js"],
+      "css": ["content.css"],
       "run_at": "document_end"
     }
   ],
   "author": "SpotGhost Team",
-  "homepage_url": "https://github.com/Riya-dudeja/spot-ghost"
+  "homepage_url": "https://spotghost.com"
 }

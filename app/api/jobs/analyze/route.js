@@ -83,6 +83,12 @@ export async function POST(req) {
     } else if (method === 'link') {
       // For auto-fill URL, prompt user to use extension for full AI analysis
       analysisResult = {
+        job: {
+          title: 'Extension Required',
+          company: 'SpotGhost',
+          description: 'Please use the SpotGhost browser extension for full analysis',
+          extensionPrompt: true
+        },
         message: 'Please use the SpotGhost extension to extract job details for a full AI-powered analysis.'
       };
     } else if (method === 'linkedin' || method === 'url') {
@@ -326,18 +332,18 @@ export async function analyzeJobWithAI(jobData) {
   if (!apiKey) return null;
   
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-  const prompt = `You are an expert fraud detection agent for online job listings. Analyze the provided job details and return your findings in the following JSON format:
+  const prompt = `You are an expert job fraud detection agent. Analyze the provided job details and return your findings in the following JSON format:
 
 {
   "verdict": "LEGITIMATE | SUSPICIOUS | FRAUDULENT",
   "confidence": "0-100",
-  "summary": "A concise summary of your reasoning.",
-  "red_flags": ["List specific red flags with evidence from the job data."],
-  "green_flags": ["List specific positive signals with evidence from the job data."],
+  "summary": "A concise, plain-language summary of your reasoning (2-3 sentences, no generic statements).",
+  "red_flags": ["List specific, actionable red flags with evidence from the job data."],
+  "green_flags": ["List specific, actionable positive signals with evidence from the job data."],
   "company_analysis": "Is the company real, established, and reputable? Reference any evidence.",
   "job_description_analysis": "Is the job description realistic and detailed? Reference any evidence.",
   "contact_analysis": "Is the contact information professional and matching the company domain?",
-  "other_notes": "Any other relevant observations."
+  "recommendations": ["List clear, actionable next steps for the user (e.g., 'Verify the company website', 'Do not provide personal information', etc.)"]
 }
 
 Here are the job details:
@@ -405,6 +411,7 @@ Be as specific as possible, reference the job data directly, and do not provide 
         company_analysis: parsed.company_analysis,
         job_description_analysis: parsed.job_description_analysis,
         contact_analysis: parsed.contact_analysis,
+        recommendations: parsed.recommendations,
         other_notes: parsed.other_notes
       };
     } else {

@@ -30,11 +30,7 @@ function DashboardHome() {
       if (inputMethod === 'linkonly') {
         method = 'linkonly';
       } else if (inputMethod === 'link') {
-        if (/linkedin\.com\/jobs\/view\//i.test(jobUrl)) {
-          method = 'linkedin';
-        } else {
-          method = 'url';
-        }
+         method = 'link';
       }
       const response = await fetch('/api/jobs/analyze', {
         method: 'POST',
@@ -535,6 +531,16 @@ function DashboardHome() {
                   {analysisResult.job.aiAnalysis.otherNotes && (
                     <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
                       <strong>Other Notes:</strong> {analysisResult.job.aiAnalysis.otherNotes}
+                    </div>
+                  )}
+                  {analysisResult.job.aiAnalysis.recommendations && analysisResult.job.aiAnalysis.recommendations.length > 0 && (
+                    <div className="text-blue-200 text-sm bg-blue-900/30 rounded-lg p-4 border border-blue-600 mb-2">
+                      <strong>AI Recommendations:</strong>
+                      <ul className="list-disc ml-6 mt-2">
+                        {analysisResult.job.aiAnalysis.recommendations.map((item, idx) => (
+                          <li key={idx}>{item}</li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>
