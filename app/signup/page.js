@@ -1,4 +1,4 @@
-import SignupForm from '@/components/SignupForm';
+import SignUpForm from '@/components/SignUpForm';
 import Link from 'next/link';
 
 export default function SignupPage() {
@@ -21,7 +21,7 @@ export default function SignupPage() {
       </div>
       
       <div className="relative z-10 flex items-center justify-center min-h-screen p-4">
-        <SignupForm />
+        <SignUpForm />
       </div>
     </div>
   );

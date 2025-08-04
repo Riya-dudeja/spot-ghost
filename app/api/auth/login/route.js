@@ -10,14 +10,28 @@ export async function POST(req) {
   await dbConnect();
   const { email, password } = await req.json();
 
+  // Debug: log incoming email
+  console.log('LOGIN_ATTEMPT', { email });
+
   const user = await User.findOne({ email });
   if (!user) {
-    return Response.json({ error: 'Invalid credentials' }, { status: 401 });
+    console.log('LOGIN_FAIL: user not found');
+    return Response.json({ error: 'Invalid credentials: user not found' }, { status: 401 });
   }
+
+  // Debug: log password hash
+  console.log('LOGIN_USER_FOUND', { email, passwordHash: user.passwordHash });
 
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
-    return Response.json({ error: 'Invalid credentials' }, { status: 401 });
+    console.log('LOGIN_FAIL: password mismatch');
+    return Response.json({ error: 'Invalid credentials: password mismatch' }, { status: 401 });
+  }
+
+  // Debug: log JWT secret presence
+  if (!JWT_SECRET) {
+    console.log('LOGIN_FAIL: JWT_SECRET missing');
+    return Response.json({ error: 'Server misconfiguration: JWT_SECRET missing' }, { status: 500 });
   }
 
   const token = jwt.sign(
@@ -25,6 +39,9 @@ export async function POST(req) {
     JWT_SECRET,
     { expiresIn: '7d' }
   );
+
+  // Debug: log token
+  console.log('LOGIN_SUCCESS', { email, token });
 
   const cookieStore = await cookies();
   cookieStore.set('token', token, {

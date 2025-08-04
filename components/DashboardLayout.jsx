@@ -28,8 +28,39 @@ const DashboardLayout = ({ children }) => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // Toast state for logout
+  const [toast, setToast] = useState(null);
+  // Logout handler
+  const handleLogout = async (e) => {
+    e.preventDefault();
+    setShowMenu(false);
+    try {
+      const res = await fetch('/api/auth/logout', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setToast('Logout successful!');
+        setTimeout(() => {
+          setToast(null);
+          window.location.href = '/login';
+        }, 1200);
+      } else {
+        setToast('Logout failed.');
+        setTimeout(() => setToast(null), 2000);
+      }
+    } catch {
+      setToast('Logout failed.');
+      setTimeout(() => setToast(null), 2000);
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white">
+      {/* Toast (ensure highest z-index) */}
+      {toast && (
+        <div style={{ zIndex: 9999 }} className="fixed top-6 right-6 bg-gray-900 border border-gray-700 text-white px-6 py-3 rounded-xl shadow-lg animate-fade-in">
+          {toast}
+        </div>
+      )}
       {/* Animated Background */}
       <div className="absolute inset-0 -z-10">
         <div className="absolute top-20 left-20 w-72 h-72 bg-emerald-500/30 rounded-full mix-blend-screen filter blur-xl opacity-60 animate-blob"></div>
@@ -109,11 +140,13 @@ const DashboardLayout = ({ children }) => {
                     >
                       <Settings size={16} className="mr-2" /> Settings
                     </Link>
-                    <form method="POST" action="/api/auth/logout">
-                      <button className="w-full text-left flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300">
-                        <LogOut size={16} className="mr-2" /> Logout
-                      </button>
-                    </form>
+                    <button
+                      type="button"
+                      className="w-full text-left flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 hover:text-red-300"
+                      onClick={handleLogout}
+                    >
+                      <LogOut size={16} className="mr-2" /> Logout
+                    </button>
                   </div>
                 )}
               </div>
