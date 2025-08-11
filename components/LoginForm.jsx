@@ -24,12 +24,15 @@ const LoginForm = () => {
       });
 
       const data = await res.json();
+      console.log('Login response:', { status: res.status, data });
+      
       if (!res.ok) throw new Error(data.error || 'Login failed');
 
       setStatus('success');
+      console.log('Login successful, redirecting to dashboard...');
 
-      // Redirect to dashboard
-      setTimeout(() => router.push('/dashboard'), 1000);
+      // Use Next.js router for proper navigation
+      router.push('/dashboard');
     } catch (err) {
       setStatus(err.message);
     }
