@@ -1,4 +1,4 @@
-c
+"use client";
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link2, FileText, AlertTriangle, CheckCircle, Globe, Briefcase, Shield, XCircle, RefreshCw } from 'lucide-react';
