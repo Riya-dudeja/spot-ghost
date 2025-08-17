@@ -33,6 +33,27 @@ export async function POST(req) {
         applicationUrl: requestData.applicationUrl
       };
 
+      // Identify missing fields for UI display
+      const missingFields = [];
+      if (!jobData.company || jobData.company.length < 2 || jobData.company === 'Unknown Company') {
+        missingFields.push('Company Name');
+      }
+      if (!jobData.description || jobData.description.length < 50) {
+        missingFields.push('Job Description');
+      }
+      if (!jobData.title || jobData.title.length < 3 || jobData.title === 'Unknown Job') {
+        missingFields.push('Job Title');
+      }
+      if (!jobData.location || jobData.location === 'Unknown Location' || jobData.location.length < 3) {
+        missingFields.push('Location');
+      }
+      // Only flag missing application URL if we don't have a valid URL from a major platform
+      const hasValidApplicationUrl = jobData.applicationUrl && 
+        (jobData.applicationUrl.startsWith('http') || jobData.applicationUrl.includes('.com'));
+      if (!hasValidApplicationUrl) {
+        missingFields.push('Application Link');
+      }
+
       let geminiAI = null;
       let verdict = null;
       let summary = null;
@@ -48,8 +69,8 @@ export async function POST(req) {
         console.warn('Gemini AI analysis for manual job failed:', e.message);
       }
 
-      // Classic analysis
-      const classic = analyzeJob(jobData);
+      // Classic analysis (no missing field penalty for manual)
+      const classic = analyzeJob(jobData, { skipMissingPenalty: true });
 
       analysisResult = {
         job: {
@@ -73,7 +94,8 @@ export async function POST(req) {
             contactAnalysis: geminiAI.contact_analysis,
             otherNotes: geminiAI.other_notes,
             raw: geminiAI.analysis
-          } : null
+          } : null,
+          missingFields // For UI to display as a separate section
         },
         professionalSummary: generateProfessionalSummary(classic, geminiAI)
       };
@@ -134,7 +156,7 @@ function generateRecommendations(warnings, safetyScore, riskLevel) {
 }
 
 // Core job analysis function
-export function analyzeJob(jobData) {
+export function analyzeJob(jobData, opts = {}) {
   const warnings = [];
   const greenFlags = [];
   let riskScore = 0;
@@ -193,33 +215,60 @@ export function analyzeJob(jobData) {
     }
   }
 
-  // 4. Website analysis
+  // 4. Website/Application URL analysis
   if (jobData.applicationUrl) {
     const url = jobData.applicationUrl.toLowerCase();
 
-    // Free website platforms
-    if (url.includes('blogspot') || url.includes('wordpress.com') || url.includes('wix')) {
-      warnings.push('⚠️ Job posted on free website platform');
-      riskScore += 35;
+    // Check if it's a major job platform (these are legitimate by default)
+    const majorJobPlatforms = [
+      'linkedin.com', 'indeed.com', 'glassdoor.com', 'monster.com', 
+      'ziprecruiter.com', 'careerbuilder.com', 'jobs.google.com'
+    ];
+    
+    const isOnMajorPlatform = majorJobPlatforms.some(platform => url.includes(platform));
+    
+    if (isOnMajorPlatform) {
+      greenFlags.push('Job posted on reputable job platform.');
+      
+      // Add specific positive feedback for different platforms
+      if (url.includes('linkedin.com')) {
+        greenFlags.push('LinkedIn requires company verification for job postings.');
+      } else if (url.includes('indeed.com')) {
+        greenFlags.push('Indeed has fraud prevention measures in place.');
+      } else if (url.includes('glassdoor.com')) {
+        greenFlags.push('Glassdoor requires employer verification for job posts.');
+      }
+      
+      // Don't penalize jobs on major platforms
     } else {
-      greenFlags.push('Job not posted on a free website platform.');
-    }
+      // Free website platforms (only flag if not on major job boards)
+      if (url.includes('blogspot') || url.includes('wordpress.com') || url.includes('wix')) {
+        warnings.push('⚠️ Job posted on free website platform');
+        riskScore += 35;
+      } else {
+        greenFlags.push('Job not posted on a free website platform.');
+      }
 
-    // Shortened URLs
-    if (url.includes('bit.ly') || url.includes('tinyurl') || url.includes('t.co')) {
-      warnings.push('🚨 Uses shortened/hidden web address - major red flag');
-      riskScore += 50;
-    } else {
-      greenFlags.push('No shortened or hidden web address detected.');
-    }
+      // Shortened URLs
+      if (url.includes('bit.ly') || url.includes('tinyurl') || url.includes('t.co')) {
+        warnings.push('🚨 Uses shortened/hidden web address - major red flag');
+        riskScore += 50;
+      } else {
+        greenFlags.push('No shortened or hidden web address detected.');
+      }
 
-    // Non-HTTPS
-    if (url.startsWith('http://')) {
-      warnings.push('⚠️ Website is not secure (no HTTPS)');
-      riskScore += 20;
-    } else if (url.startsWith('https://')) {
-      greenFlags.push('Website uses secure HTTPS connection.');
+      // Non-HTTPS
+      if (url.startsWith('http://')) {
+        warnings.push('⚠️ Website is not secure (no HTTPS)');
+        riskScore += 20;
+      } else if (url.startsWith('https://')) {
+        greenFlags.push('Website uses secure HTTPS connection.');
+      }
     }
+  } else {
+    // Only flag missing application URL if it's not from a major platform
+    warnings.push('⚠️ No application URL provided');
+    riskScore += 15;
   }
 
   // 5. Compensation red flags
@@ -248,17 +297,35 @@ export function analyzeJob(jobData) {
     }
   }
 
-  // 6. Missing information
+  // 6. Missing critical information
   const missingInfo = [];
-  if (!jobData.company || jobData.company.length < 2) missingInfo.push('company name');
-  if (!jobData.description || jobData.description.length < 50) missingInfo.push('job description');
-  if (!jobData.title || jobData.title.length < 3) missingInfo.push('job title');
+  if (!jobData.company || jobData.company.length < 2 || jobData.company === 'Unknown Company') {
+    missingInfo.push('company name');
+  }
+  if (!jobData.description || jobData.description.length < 50) {
+    missingInfo.push('job description');
+  }
+  if (!jobData.title || jobData.title.length < 3 || jobData.title === 'Unknown Job') {
+    missingInfo.push('job title');
+  }
+  if (!jobData.location || jobData.location === 'Unknown Location' || jobData.location.length < 3) {
+    missingInfo.push('location');
+  }
+  // Only flag missing application URL if we don't have a valid URL from a major platform
+  const hasValidApplicationUrl = jobData.applicationUrl && 
+    (jobData.applicationUrl.startsWith('http') || jobData.applicationUrl.includes('.com'));
+  if (!hasValidApplicationUrl) {
+    missingInfo.push('application link');
+  }
 
-  if (missingInfo.length > 1) {
-    warnings.push(`Missing key information: ${missingInfo.join(', ')}`);
-    riskScore += missingInfo.length * 25;
+  // Only warn if missing 1+ critical pieces of information
+  if (missingInfo.length >= 1) {
+    if (!opts.skipMissingPenalty) {
+      warnings.push(`Missing key information: ${missingInfo.join(', ')}`);
+      riskScore += missingInfo.length * 20; // Reduced penalty but still significant
+    }
   } else {
-    greenFlags.push('All key job information is present.');
+    greenFlags.push('All essential job information is present.');
   }
 
   // 7. Generic content check
@@ -279,12 +346,12 @@ export function analyzeJob(jobData) {
   riskScore = Math.min(100, riskScore);
   const safetyScore = Math.max(0, 100 - riskScore);
 
-  // Determine risk level
+  // Determine risk level - made more strict
   let riskLevel;
-  if (safetyScore >= 80) riskLevel = 'Very Low';
-  else if (safetyScore >= 65) riskLevel = 'Low';
-  else if (safetyScore >= 50) riskLevel = 'Medium';
-  else if (safetyScore >= 35) riskLevel = 'High';
+  if (safetyScore >= 85) riskLevel = 'Very Low';
+  else if (safetyScore >= 70) riskLevel = 'Low'; 
+  else if (safetyScore >= 55) riskLevel = 'Medium';
+  else if (safetyScore >= 40) riskLevel = 'High';
   else riskLevel = 'Critical';
 
   return {

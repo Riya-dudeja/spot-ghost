@@ -36,11 +36,18 @@ const PLATFORM_CONFIG = {
 
 // Initialize popup when DOM is loaded
 document.addEventListener('DOMContentLoaded', async () => {
-  await initializePopup();
-  setupEventHandlers();
-  await loadSettings();
-  await detectCurrentPlatform();
-  await loadStats();
+  console.log('SpotGhost Popup: Starting initialization...');
+  try {
+    await initializePopup();
+    setupEventHandlers();
+    await loadSettings();
+    await detectCurrentPlatform();
+    await loadStats();
+    console.log('SpotGhost Popup: Initialization complete');
+  } catch (error) {
+    console.error('SpotGhost Popup: Initialization failed:', error);
+    showStatus('Extension initialization failed: ' + error.message, 'error');
+  }
 });
 
 // Initialize popup components
@@ -101,21 +108,25 @@ function setupEventHandlers() {
   document.getElementById('report-btn')?.addEventListener('click', handleReportScam);
   document.getElementById('details-btn')?.addEventListener('click', handleViewDetails);
   
+  // Permission buttons
+  document.getElementById('grant-permissions-btn')?.addEventListener('click', handlePermissionGrant);
+  document.getElementById('deny-permissions-btn')?.addEventListener('click', handlePermissionDenial);
+  
   // Footer links
   document.getElementById('website-link')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'https://spotghost.com' });
+    chrome.tabs.create({ url: 'https://spot-ghost-jobs.vercel.app' });
   });
   
   document.getElementById('support-link')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'https://spotghost.com/support' });
+    chrome.tabs.create({ url: 'https://spot-ghost-jobs.vercel.app/dashboard' });
   });
   
   document.getElementById('feedback-link')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'https://spotghost.com/feedback' });
+    chrome.tabs.create({ url: 'https://spot-ghost-jobs.vercel.app/dashboard' });
   });
   
   document.getElementById('upgrade-link')?.addEventListener('click', () => {
-    chrome.tabs.create({ url: 'https://spotghost.com/premium' });
+    chrome.tabs.create({ url: 'https://spot-ghost-jobs.vercel.app/dashboard' });
   });
 }
 
@@ -162,74 +173,318 @@ async function handleAnalyzeClick() {
     // Show loading state
     analyzeBtn.classList.add('loading');
     analyzeBtn.disabled = true;
-    showStatus('Extracting job data...', 'info');
+    showStatus('Checking permissions...', 'info');
     
     // Get current tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     
-    // Check if we're on a supported platform
-    const platform = detectPlatformFromUrl(tab.url);
-    if (!platform || !platform.supported) {
-      throw new Error('Please navigate to a supported job site first');
+    if (!tab || !tab.url) {
+      throw new Error('Unable to access the current tab');
     }
     
-    // Extract job data from content script
-    const jobData = await new Promise((resolve, reject) => {
-      chrome.tabs.sendMessage(tab.id, { action: 'extractJob' }, (response) => {
-        if (chrome.runtime.lastError) {
-          reject(new Error('Failed to connect to page. Please refresh and try again.'));
-          return;
-        }
-        
-        if (response && response.error) {
-          reject(new Error(response.error));
-          return;
-        }
-        
-        if (!response || !response.title || !response.company) {
-          reject(new Error('Could not extract job data. Please ensure you\'re on a job posting page.'));
-          return;
-        }
-        
-        resolve(response);
-      });
-    });
+    // Check if we're on a supported platform
+    const platform = detectPlatformFromUrl(tab.url);
+    const hostname = new URL(tab.url).hostname;
     
-    showStatus('Analyzing for scams and red flags...', 'info');
+    if (!platform || !platform.supported) {
+      // Show specific error with supported sites
+      const supportedSites = Object.keys(PLATFORM_CONFIG).map(domain => {
+        const config = PLATFORM_CONFIG[domain];
+        return `${config.name} (${domain})`;
+      }).slice(0, 5).join(', ') + '...';
+      
+      throw new Error(`❌ Not a supported job site\n\nCurrent site: ${hostname}\n\nSupported sites:\n${supportedSites}\n\nPlease navigate to a job posting on one of these sites.`);
+    }
     
-    // Send to background for analysis
-    const analysis = await new Promise((resolve, reject) => {
-      chrome.runtime.sendMessage({
-        action: 'analyzeJob',
-        data: jobData
-      }, (response) => {
-        if (response && response.success) {
-          resolve(response.analysis);
-        } else {
-          reject(new Error(response?.error || 'Analysis failed'));
-        }
-      });
-    });
+    console.log(`Detected platform: ${platform.name} on ${hostname}`);
     
-    // Display results
-    displayAnalysisResults(analysis);
-    lastAnalysis = analysis;
+    // Check if we have permissions for this site
+    const hasPermissions = await checkSitePermissions(hostname);
     
-    // Update stats
-    await updateStats('scan');
+    if (!hasPermissions) {
+      // Show permissions request screen
+      showPermissionsScreen(hostname, platform.name);
+      return;
+    }
     
-    showStatus('Analysis complete!', 'success');
+    showStatus('Extracting job data...', 'info');
+    
+    // Rest of the analysis logic remains the same...
+    await performJobAnalysis(tab, platform, hostname);
     
   } catch (error) {
-    console.error('Analysis error:', error);
-    showStatus(`Error: ${error.message}`, 'error');
+    console.error('SpotGhost Analysis Error:', error);
+    
+    // Show user-friendly error message
+    const errorMessage = error.message || 'Unknown error occurred';
+    showStatus(errorMessage, 'error');
+    
+    // Log additional debug info
+    console.log('Debug Info:', {
+      currentUrl: tab?.url,
+      platform: platform?.name,
+      timestamp: new Date().toISOString()
+    });
+    
   } finally {
     analyzeBtn.classList.remove('loading');
     analyzeBtn.disabled = false;
   }
 }
 
-  // Display analysis results in the UI
+// Check if we have permissions for the current site
+async function checkSitePermissions(hostname) {
+  try {
+    // Check if we have host permissions for this site
+    const hasHostPermission = await chrome.permissions.contains({
+      origins: [`https://${hostname}/*`]
+    });
+    
+    // Check if we have scripting permission
+    const hasScriptingPermission = await chrome.permissions.contains({
+      permissions: ['scripting']
+    });
+    
+    return hasHostPermission && hasScriptingPermission;
+  } catch (error) {
+    console.error('Permission check error:', error);
+    return false;
+  }
+}
+
+// Show permissions request screen
+function showPermissionsScreen(hostname, platformName) {
+  const emptyState = document.getElementById('empty-state');
+  const resultsSection = document.getElementById('results-section');
+  const permissionsScreen = document.getElementById('permissions-screen');
+  
+  // Hide other sections
+  emptyState.style.display = 'none';
+  resultsSection.style.display = 'none';
+  
+  // Update permissions screen content
+  const title = permissionsScreen.querySelector('h3');
+  const description = permissionsScreen.querySelector('p');
+  
+  title.textContent = `Enable ${platformName} Access`;
+  description.textContent = `SpotGhost needs permission to analyze job postings on ${hostname} for scam detection.`;
+  
+  // Show permissions screen
+  permissionsScreen.style.display = 'block';
+}
+
+// Handle permission grant
+async function handlePermissionGrant() {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const hostname = new URL(tab.url).hostname;
+    
+    showStatus('Requesting permissions...', 'info');
+    
+    // Request permissions
+    const granted = await chrome.permissions.request({
+      permissions: ['scripting'],
+      origins: [`https://${hostname}/*`]
+    });
+    
+    if (granted) {
+      showStatus('Permissions granted! Analyzing job...', 'success');
+      
+      // Hide permissions screen
+      document.getElementById('permissions-screen').style.display = 'none';
+      
+      // Proceed with analysis
+      const platform = detectPlatformFromUrl(tab.url);
+      await performJobAnalysis(tab, platform, hostname);
+    } else {
+      showStatus('Permissions denied. Cannot analyze job without access.', 'error');
+    }
+  } catch (error) {
+    console.error('Permission grant error:', error);
+    showStatus('Failed to request permissions. Please try again.', 'error');
+  }
+}
+
+// Handle permission denial
+function handlePermissionDenial() {
+  document.getElementById('permissions-screen').style.display = 'none';
+  document.getElementById('empty-state').style.display = 'block';
+  showStatus('Analysis requires site access. Click "Analyze This Job" to try again.', 'info');
+}
+
+// Perform the actual job analysis (extracted from handleAnalyzeClick)
+async function performJobAnalysis(tab, platform, hostname) {
+  // Test content script communication with specific error messages
+  let contentScriptReady = false;
+  
+  try {
+    // Test if content script is already loaded
+    const pingResult = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Content script not responding')), 3000);
+      
+      chrome.tabs.sendMessage(tab.id, { action: 'ping' }, (response) => {
+        clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          reject(new Error(`Chrome extension error: ${chrome.runtime.lastError.message}`));
+        } else if (response && response.status === 'ready') {
+          resolve(response);
+        } else {
+          reject(new Error('Content script not properly initialized'));
+        }
+      });
+    });
+    
+    contentScriptReady = true;
+    console.log('Content script already loaded:', pingResult);
+    
+  } catch (pingError) {
+    console.log('Content script not loaded, injecting:', pingError.message);
+    
+    // Inject content script manually
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js']
+      });
+      
+      // Wait for initialization and test again
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      const secondPing = await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Injected content script not responding')), 3000);
+        
+        chrome.tabs.sendMessage(tab.id, { action: 'ping' }, (response) => {
+          clearTimeout(timeout);
+          if (chrome.runtime.lastError) {
+            reject(new Error(`Post-injection error: ${chrome.runtime.lastError.message}`));
+          } else if (response && response.status === 'ready') {
+            resolve(response);
+          } else {
+            reject(new Error('Injected content script failed to initialize'));
+          }
+        });
+      });
+      
+      contentScriptReady = true;
+      console.log('Content script injected and ready:', secondPing);
+      
+    } catch (injectionError) {
+      throw new Error(`❌ Extension injection failed\n\nCause: ${injectionError.message}\n\nSolution:\n1. Refresh the page (F5)\n2. Try again\n3. Check if you're on the actual job posting page (not search results)`);
+    }
+  }
+  
+  if (!contentScriptReady) {
+    throw new Error('❌ Extension not ready\n\nPlease refresh the page and try again.');
+  }
+
+  try {
+    // Extract job data with specific error messages
+    showStatus('Extracting job information...', 'info');
+    
+    const jobData = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('❌ Data extraction timeout\n\nThe page may still be loading.\nPlease wait a moment and try again.'));
+    }, 15000);
+    
+    chrome.tabs.sendMessage(tab.id, { action: 'extractJob' }, (response) => {
+      clearTimeout(timeout);
+      
+      if (chrome.runtime.lastError) {
+        reject(new Error(`❌ Communication error\n\n${chrome.runtime.lastError.message}\n\nSolution: Refresh the page and try again.`));
+        return;
+      }
+      
+      if (response && response.error) {
+        reject(new Error(`❌ Extraction failed\n\n${response.error}\n\nMake sure you're on a job posting page (not search results).`));
+        return;
+      }
+      
+      if (!response) {
+        reject(new Error('❌ No response from page\n\nThe page content may not be compatible.\nTry refreshing and ensure you\'re on a job posting.'));
+        return;
+      }
+      
+      if (!response.title && !response.company) {
+        reject(new Error(`❌ No job data found\n\nPage type: ${platform.name}\nURL: ${hostname}\n\nSolution:\n1. Make sure you're on a specific job posting\n2. Wait for the page to fully load\n3. Try refreshing the page`));
+        return;
+      }
+      
+      if (!response.title) {
+        reject(new Error('❌ Job title not found\n\nThis might not be a job posting page.\nPlease navigate to a specific job listing.'));
+        return;
+      }
+      
+      if (!response.company) {
+        reject(new Error('❌ Company name not found\n\nThe page structure may be different than expected.\nPlease try a different job posting.'));
+        return;
+      }
+      
+      console.log('✅ Job data extracted successfully:', response);
+      resolve(response);
+    });
+  });
+
+  showStatus('Analyzing for scams and red flags...', 'info');
+  
+  // Send to background for analysis with better error handling
+  const analysis = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('❌ Analysis timeout\n\nThe analysis server may be unavailable.\nPlease try again in a moment.'));
+    }, 30000);
+    
+    chrome.runtime.sendMessage({
+      action: 'analyzeJob',
+      data: jobData
+    }, (response) => {
+      clearTimeout(timeout);
+      
+      if (chrome.runtime.lastError) {
+        reject(new Error(`❌ Extension error\n\n${chrome.runtime.lastError.message}\n\nTry reloading the extension.`));
+        return;
+      }
+      
+      if (!response) {
+        reject(new Error('❌ No analysis response\n\nThe background service may have stopped.\nTry reloading the extension.'));
+        return;
+      }
+      
+      if (response.success) {
+        resolve(response.analysis);
+      } else {
+        const errorMsg = response.error || 'Unknown analysis error';
+        if (errorMsg.includes('fetch')) {
+          reject(new Error(`❌ Server connection failed\n\nCannot reach analysis server.\n\nCheck:\n1. Internet connection\n2. Server status\n3. Extension settings`));
+        } else {
+          reject(new Error(`❌ Analysis failed\n\n${errorMsg}`));
+        }
+      }
+    });
+  });
+
+  // Display results
+  displayAnalysisResults(analysis);
+  lastAnalysis = analysis;
+
+  // Update stats
+  await updateStats('scan');
+
+  showStatus('Analysis complete!', 'success');
+  
+  } catch (error) {
+    console.error('❌ Job analysis error:', error);
+    showStatus(error.message || 'Analysis failed', 'error');
+    
+    // Hide loading and show error state
+    document.getElementById('loading-spinner').style.display = 'none';
+    const analyzeBtn = document.getElementById('analyze-btn');
+    if (analyzeBtn) {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Analyze Page';
+    }
+  }
+}
+
+// Display analysis results in the UI
 function displayAnalysisResults(analysis) {
   const resultsSection = document.getElementById('results-section');
   const emptyState = document.getElementById('empty-state');
@@ -238,10 +493,21 @@ function displayAnalysisResults(analysis) {
   emptyState.style.display = 'none';
   resultsSection.style.display = 'block';
   
-  // Update safety score
-  const safetyScore = analysis.job?.classicAnalysis?.safetyScore || 0;
-  const riskLevel = analysis.job?.classicAnalysis?.riskLevel || 'Unknown';
+  // Get analysis data
+  const classicAnalysis = analysis.job?.classicAnalysis || {};
+  const aiAnalysis = analysis.job?.aiAnalysis || null;
+  const safetyScore = classicAnalysis.safetyScore || 0;
+  const riskLevel = classicAnalysis.riskLevel || 'Unknown';
   
+  console.log('📊 Analysis Results:', {
+    hasClassic: !!classicAnalysis,
+    hasAI: !!aiAnalysis,
+    safetyScore,
+    riskLevel,
+    fullAnalysis: analysis
+  });
+  
+  // Update safety score
   document.getElementById('safety-score').textContent = safetyScore;
   document.getElementById('risk-level').textContent = riskLevel;
   document.getElementById('risk-level').className = `risk-level risk-${riskLevel.toLowerCase().replace(' ', '-')}`;
@@ -257,22 +523,96 @@ function displayAnalysisResults(analysis) {
     scoreCircle.classList.add('score-low');
   }
   
-  // Display red flags
-  const redFlags = analysis.job?.classicAnalysis?.redFlags || [];
+  // Display AI Analysis or Classic Analysis
+  let redFlags = [];
+  let greenFlags = [];
+  
+  if (aiAnalysis) {
+    console.log('✅ AI Analysis available:', aiAnalysis);
+    
+    // Show AI analysis section
+    const aiAnalysisSection = document.getElementById('ai-analysis');
+    if (aiAnalysisSection) {
+      aiAnalysisSection.style.display = 'block';
+    }
+    
+    // Use AI analysis if available
+    redFlags = aiAnalysis.redFlags || [];
+    greenFlags = aiAnalysis.greenFlags || [];
+    
+    // Add AI verdict and summary at the top
+    const aiVerdictElement = document.getElementById('ai-verdict');
+    const aiSummaryElement = document.getElementById('ai-summary');
+    
+    if (aiVerdictElement && aiAnalysis.verdict) {
+      aiVerdictElement.textContent = `AI Verdict: ${aiAnalysis.verdict}`;
+      aiVerdictElement.className = `ai-verdict ${aiAnalysis.verdict?.toLowerCase() || 'unknown'}`;
+      aiVerdictElement.style.display = 'block';
+    }
+    
+    if (aiSummaryElement && aiAnalysis.summary) {
+      aiSummaryElement.textContent = aiAnalysis.summary;
+      aiSummaryElement.style.display = 'block';
+    }
+    
+    // Add AI-specific sections
+    if (aiAnalysis.companyAnalysis) {
+      addAnalysisSection('🏢 Company Analysis', aiAnalysis.companyAnalysis);
+    }
+    
+    if (aiAnalysis.jobDescriptionAnalysis) {
+      addAnalysisSection('📝 Job Description Analysis', aiAnalysis.jobDescriptionAnalysis);
+    }
+    
+    if (aiAnalysis.contactAnalysis) {
+      addAnalysisSection('📧 Contact Analysis', aiAnalysis.contactAnalysis);
+    }
+    
+    if (aiAnalysis.recommendations && aiAnalysis.recommendations.length > 0) {
+      addRecommendationsSection(aiAnalysis.recommendations);
+    }
+    
+  } else {
+    console.log('ℹ️ No AI Analysis available, showing classic analysis');
+    
+    // Hide AI analysis section
+    const aiAnalysisSection = document.getElementById('ai-analysis');
+    if (aiAnalysisSection) {
+      aiAnalysisSection.style.display = 'none';
+    }
+    
+    // Fallback to classic analysis
+    redFlags = classicAnalysis.redFlags || [];
+    greenFlags = classicAnalysis.greenFlags || [];
+    
+    // Hide AI-specific elements
+    const aiVerdictElement = document.getElementById('ai-verdict');
+    const aiSummaryElement = document.getElementById('ai-summary');
+    if (aiVerdictElement) aiVerdictElement.style.display = 'none';
+    if (aiSummaryElement) aiSummaryElement.style.display = 'none';
+  }
+  
+  // Display flags
+  displayFlags('positive-signals', greenFlags, 'green');
   displayFlags('red-flags', redFlags, 'red');
   
-  // Display green flags
-  const greenFlags = analysis.job?.classicAnalysis?.greenFlags || [];
-  displayFlags('green-flags', greenFlags, 'green');
+  // Show/hide flag sections based on content
+  const positiveSection = document.getElementById('positive-signals-section');
+  const redFlagsSection = document.getElementById('red-flags-section');
   
-  // Show/hide flag sections
-  document.getElementById('red-flags-section').style.display = redFlags.length > 0 ? 'block' : 'none';
-  document.getElementById('green-flags-section').style.display = greenFlags.length > 0 ? 'block' : 'none';
+  if (positiveSection) {
+    positiveSection.style.display = greenFlags.length > 0 ? 'block' : 'none';
+  }
+  if (redFlagsSection) {
+    redFlagsSection.style.display = redFlags.length > 0 ? 'block' : 'none';
+  }
 }
 
 // Display flags in the UI
 function displayFlags(sectionId, flags, type) {
   const list = document.getElementById(`${sectionId}-list`);
+  if (!list) return;
+  
   list.innerHTML = '';
   
   flags.forEach(flag => {
@@ -283,18 +623,89 @@ function displayFlags(sectionId, flags, type) {
   });
 }
 
+// Add AI analysis section dynamically
+function addAnalysisSection(title, content) {
+  const resultsSection = document.getElementById('results-section');
+  if (!resultsSection || !content) return;
+  
+  // Check if section already exists
+  const existingSection = document.getElementById(`ai-section-${title.toLowerCase().replace(/\s+/g, '-')}`);
+  if (existingSection) {
+    existingSection.remove();
+  }
+  
+  const section = document.createElement('div');
+  section.id = `ai-section-${title.toLowerCase().replace(/\s+/g, '-')}`;
+  section.className = 'analysis-section';
+  section.innerHTML = `
+    <h3 class="analysis-title">${title}</h3>
+    <div class="analysis-content">${content}</div>
+  `;
+  
+  // Insert before the buttons
+  const buttonsSection = resultsSection.querySelector('.button-section');
+  if (buttonsSection) {
+    resultsSection.insertBefore(section, buttonsSection);
+  } else {
+    resultsSection.appendChild(section);
+  }
+}
+
+// Add recommendations section
+function addRecommendationsSection(recommendations) {
+  const resultsSection = document.getElementById('results-section');
+  if (!resultsSection || !recommendations || recommendations.length === 0) return;
+  
+  // Check if section already exists
+  const existingSection = document.getElementById('ai-recommendations');
+  if (existingSection) {
+    existingSection.remove();
+  }
+  
+  const section = document.createElement('div');
+  section.id = 'ai-recommendations';
+  section.className = 'analysis-section recommendations-section';
+  
+  let recommendationsHtml = '<h3 class="analysis-title">🔍 AI Recommendations</h3><ul class="recommendations-list">';
+  recommendations.forEach(rec => {
+    recommendationsHtml += `<li class="recommendation-item">${rec}</li>`;
+  });
+  recommendationsHtml += '</ul>';
+  
+  section.innerHTML = recommendationsHtml;
+  
+  // Insert before the buttons
+  const buttonsSection = resultsSection.querySelector('.button-section');
+  if (buttonsSection) {
+    resultsSection.insertBefore(section, buttonsSection);
+  } else {
+    resultsSection.appendChild(section);
+  }
+}
+
 // Show status message
 function showStatus(message, type = 'info') {
   const status = document.getElementById('status');
-  status.textContent = message;
+  
+  // Handle multi-line messages by converting newlines to HTML breaks
+  if (message.includes('\n')) {
+    status.innerHTML = message.replace(/\n/g, '<br>');
+  } else {
+    status.textContent = message;
+  }
+  
   status.className = `status ${type}`;
   status.style.display = 'block';
   
-  // Auto-hide success/error messages after 5 seconds
-  if (type === 'success' || type === 'error') {
+  // Auto-hide success/error messages after longer time for errors
+  if (type === 'success') {
     setTimeout(() => {
       status.style.display = 'none';
-    }, 5000);
+    }, 3000);
+  } else if (type === 'error') {
+    setTimeout(() => {
+      status.style.display = 'none';
+    }, 10000); // Longer display time for errors
   }
 }
 
@@ -523,11 +934,25 @@ function handleReportScam() {
 
 // Handle view details
 function handleViewDetails() {
-  if (!lastAnalysis) return;
+  if (!lastAnalysis) {
+    showStatus('No analysis data available to view details.', 'error');
+    return;
+  }
   
-  // Open detailed analysis in new tab
+  // Store analysis data in session storage for the dashboard to access
+  const analysisData = {
+    title: lastAnalysis.job?.title || '',
+    company: lastAnalysis.job?.company || '',
+    url: lastAnalysis.job?.sourceURL || '',
+    safetyScore: lastAnalysis.job?.classicAnalysis?.safetyScore || 0,
+    riskLevel: lastAnalysis.job?.classicAnalysis?.riskLevel || 'Unknown',
+    redFlags: lastAnalysis.job?.classicAnalysis?.redFlags || [],
+    greenFlags: lastAnalysis.job?.classicAnalysis?.greenFlags || []
+  };
+  
+  // Open dashboard report page (without auth requirement for extension data)
   chrome.tabs.create({
-    url: `https://spotghost.com/analysis?id=${encodeURIComponent(lastAnalysis.job?.sourceURL || '')}`
+    url: `https://spot-ghost-jobs.vercel.app/dashboard/report?source=extension&job=${encodeURIComponent(JSON.stringify(analysisData))}`
   });
 }
 

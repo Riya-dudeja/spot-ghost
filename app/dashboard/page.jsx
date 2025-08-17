@@ -1,4 +1,4 @@
-"use client";
+c
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link2, FileText, AlertTriangle, CheckCircle, Globe, Briefcase, Shield, XCircle, RefreshCw } from 'lucide-react';
@@ -356,10 +356,10 @@ function DashboardHome() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="max-w-6xl mx-auto space-y-6"
+          className="max-w-4xl mx-auto space-y-6"
         >
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 gap-4 sm:gap-0">
             <h2 className="text-2xl font-bold text-white flex items-center">
               <Shield className="mr-3" size={28} />
               Analysis Results
@@ -375,8 +375,8 @@ function DashboardHome() {
 
           {/* LINKONLY: Classic URL check only */}
           {analysisResult.method === 'linkonly' && analysisResult.job && analysisResult.job.analysis && (
-            <div className="bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border border-blue-500/30 rounded-xl p-6 mb-6">
-              <h3 className="text-xl font-semibold text-blue-300 mb-4 flex items-center">
+            <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8">
+              <h3 className="text-xl font-semibold text-blue-200 mb-4 flex items-center">
                 <span className="mr-2">🔗</span>
                 Link Safety Check
               </h3>
@@ -387,7 +387,7 @@ function DashboardHome() {
                 <strong>Risk Level:</strong> {analysisResult.job.analysis.riskLevel}
               </div>
               {analysisResult.job.analysis.warnings && analysisResult.job.analysis.warnings.length > 0 && (
-                <div className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg p-4 border border-yellow-600 mb-2">
+                <div className="text-yellow-200 text-sm bg-yellow-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                   <strong>Red Flags:</strong>
                   <ul className="list-disc ml-6 mt-2">
                     {analysisResult.job.analysis.warnings.map((item, idx) => (
@@ -397,7 +397,7 @@ function DashboardHome() {
                 </div>
               )}
               {analysisResult.job.analysis.recommendations && (
-                <div className="text-green-300 text-sm bg-green-900/30 rounded-lg p-4 border border-green-600 mb-2">
+                <div className="text-green-200 text-sm bg-green-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                   <strong>Recommendations:</strong>
                   <ul className="list-disc ml-6 mt-2">
                     {analysisResult.job.analysis.recommendations.summary?.map((item, idx) => (
@@ -415,15 +415,15 @@ function DashboardHome() {
 
           {/* LINK: Prompt to use extension */}
           {analysisResult.method === 'link' && (
-            <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border border-yellow-500/30 rounded-xl p-6 mb-6 text-center">
-              <h3 className="text-xl font-semibold text-yellow-300 mb-4 flex items-center justify-center">
+            <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8 text-center">
+              <h3 className="text-xl font-semibold text-yellow-200 mb-4 flex items-center justify-center">
                 <span className="mr-2">🧩</span>
                 Use the SpotGhost Extension
               </h3>
               <div className="text-gray-200 text-base mb-2">
                 For a full, accurate job analysis, please use the <span className="font-bold text-yellow-200">SpotGhost browser extension</span> to extract all job details directly from the job board page.
               </div>
-              <div className="text-yellow-400 text-xs mt-2">This ensures you get the most reliable and detailed results.</div>
+              <div className="text-yellow-200 text-xs mt-2">This ensures you get the most reliable and detailed results.</div>
             </div>
           )}
 
@@ -431,8 +431,8 @@ function DashboardHome() {
           {analysisResult.job && analysisResult.job.classicAnalysis && (
             <>
               {/* Classic Analysis Section */}
-              <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 rounded-xl p-6 mb-6">
-                <h3 className="text-xl font-semibold text-green-300 mb-4 flex items-center">
+              <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8">
+                <h3 className="text-xl font-semibold text-green-200 mb-4 flex items-center">
                   <span className="mr-2">🛡️</span>
                   Classic Analysis
                 </h3>
@@ -443,7 +443,7 @@ function DashboardHome() {
                   <strong>Risk Level:</strong> {analysisResult.job.classicAnalysis.riskLevel}
                 </div>
                 {analysisResult.job.classicAnalysis.redFlags && analysisResult.job.classicAnalysis.redFlags.length > 0 && (
-                  <div className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg p-4 border border-yellow-600 mb-2">
+                  <div className="text-yellow-200 text-sm bg-yellow-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                     <strong>Red Flags:</strong>
                     <ul className="list-disc ml-6 mt-2">
                       {analysisResult.job.classicAnalysis.redFlags.map((item, idx) => (
@@ -453,7 +453,7 @@ function DashboardHome() {
                   </div>
                 )}
                 {analysisResult.job.classicAnalysis.greenFlags && analysisResult.job.classicAnalysis.greenFlags.length > 0 && (
-                  <div className="text-green-300 text-sm bg-green-900/30 rounded-lg p-4 border border-green-600 mb-2">
+                  <div className="text-green-200 text-sm bg-green-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                     <strong>Positive Signals:</strong>
                     <ul className="list-disc ml-6 mt-2">
                       {analysisResult.job.classicAnalysis.greenFlags.map((item, idx) => (
@@ -462,7 +462,7 @@ function DashboardHome() {
                     </ul>
                   </div>
                 )}
-                <div className="mt-4 text-xs text-green-400 flex items-center">
+                <div className="mt-4 text-xs text-green-200 flex items-center">
                   <span className="mr-2">🔍</span>
                   <span>Classic SpotGhost analysis</span>
                 </div>
@@ -470,15 +470,15 @@ function DashboardHome() {
 
               {/* AI Analysis Section (Advisory) */}
               {analysisResult.job.aiAnalysis && (
-                <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-6">
-                  <h3 className="text-xl font-semibold text-purple-300 mb-4 flex items-center">
+                <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8">
+                  <h3 className="text-xl font-semibold text-purple-200 mb-4 flex items-center">
                     <span className="mr-2">🤖</span>
                     Gemini AI Analysis <span className="ml-2 text-xs text-purple-200">(Advisory)</span>
                   </h3>
                   <div className="text-purple-200 text-xs mb-2">
                     The following AI analysis is advisory and may not be 100% accurate. Always use your own judgment and verify job details independently.
                   </div>
-                  <div className="text-gray-200 text-lg font-bold mb-2">
+                  <div className="text-gray-200 text-lg font-bold mb-4">
                     Verdict: <span className={
                       analysisResult.job.aiAnalysis.verdict === 'LEGITIMATE' ? 'text-green-400' :
                       analysisResult.job.aiAnalysis.verdict === 'SUSPICIOUS' ? 'text-yellow-400' :
@@ -489,12 +489,12 @@ function DashboardHome() {
                     )}
                   </div>
                   {analysisResult.job.aiAnalysis.summary && (
-                    <div className="text-gray-300 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-900/50 rounded-lg p-4 border border-gray-600 mb-2">
+                    <div className="text-gray-300 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-800/60 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                       {analysisResult.job.aiAnalysis.summary}
                     </div>
                   )}
                   {analysisResult.job.aiAnalysis.redFlags && analysisResult.job.aiAnalysis.redFlags.length > 0 && (
-                    <div className="text-yellow-300 text-sm bg-yellow-900/30 rounded-lg p-4 border border-yellow-600 mb-2">
+                    <div className="text-yellow-200 text-sm bg-yellow-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                       <strong>AI-Identified Red Flags:</strong>
                       <ul className="list-disc ml-6 mt-2">
                         {analysisResult.job.aiAnalysis.redFlags.map((item, idx) => (
@@ -504,7 +504,7 @@ function DashboardHome() {
                     </div>
                   )}
                   {analysisResult.job.aiAnalysis.greenFlags && analysisResult.job.aiAnalysis.greenFlags.length > 0 && (
-                    <div className="text-green-300 text-sm bg-green-900/30 rounded-lg p-4 border border-green-600 mb-2">
+                    <div className="text-green-200 text-sm bg-green-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                       <strong>AI-Identified Positive Signals:</strong>
                       <ul className="list-disc ml-6 mt-2">
                         {analysisResult.job.aiAnalysis.greenFlags.map((item, idx) => (
@@ -514,27 +514,27 @@ function DashboardHome() {
                     </div>
                   )}
                   {analysisResult.job.aiAnalysis.companyAnalysis && (
-                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                       <strong>Company Analysis:</strong> {analysisResult.job.aiAnalysis.companyAnalysis}
                     </div>
                   )}
                   {analysisResult.job.aiAnalysis.jobDescriptionAnalysis && (
-                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                       <strong>Job Description Analysis:</strong> {analysisResult.job.aiAnalysis.jobDescriptionAnalysis}
                     </div>
                   )}
                   {analysisResult.job.aiAnalysis.contactAnalysis && (
-                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                       <strong>Contact Analysis:</strong> {analysisResult.job.aiAnalysis.contactAnalysis}
                     </div>
                   )}
                   {analysisResult.job.aiAnalysis.otherNotes && (
-                    <div className="text-purple-200 text-sm bg-purple-900/30 rounded-lg p-4 border border-purple-600 mb-2">
+                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-xl p-4 border border-gray-700 mb-3">
                       <strong>Other Notes:</strong> {analysisResult.job.aiAnalysis.otherNotes}
                     </div>
                   )}
                   {analysisResult.job.aiAnalysis.recommendations && analysisResult.job.aiAnalysis.recommendations.length > 0 && (
-                    <div className="text-blue-200 text-sm bg-blue-900/30 rounded-lg p-4 border border-blue-600 mb-2">
+                    <div className="text-blue-200 text-sm bg-blue-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
                       <strong>AI Recommendations:</strong>
                       <ul className="list-disc ml-6 mt-2">
                         {analysisResult.job.aiAnalysis.recommendations.map((item, idx) => (

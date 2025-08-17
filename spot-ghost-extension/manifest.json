@@ -4,13 +4,15 @@
   "version": "2.0.0",
   "description": "AI-powered job scam detection across LinkedIn, Indeed, Glassdoor, Monster, and more. Protect yourself from fraudulent job postings.",
   "permissions": [
-    "scripting", 
     "activeTab", 
     "storage", 
     "notifications",
-    "background"
+    "sidePanel"
   ],
-  "host_permissions": [
+  "optional_permissions": [
+    "scripting"
+  ],
+  "optional_host_permissions": [
     "https://www.linkedin.com/*",
     "https://www.indeed.com/*",
     "https://www.glassdoor.com/*",
@@ -29,47 +31,21 @@
     "https://flexjobs.com/*",
     "https://upwork.com/*",
     "https://www.freelancer.com/*",
-    "https://www.fiverr.com/*",
-    "http://localhost:3000/*",
+    "https://www.fiverr.com/*"
+  ],
+  "host_permissions": [
+    "https://spot-ghost-jobs.vercel.app/*",
     "https://*.spotghost.com/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
-    "default_popup": "popup.html",
     "default_title": "SpotGhost - Analyze This Job"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://www.linkedin.com/jobs/*",
-        "https://www.indeed.com/viewjob*",
-        "https://www.indeed.com/jobs*",
-        "https://www.glassdoor.com/job-listing/*",
-        "https://www.glassdoor.com/Jobs/*",
-        "https://www.monster.com/job-openings/*",
-        "https://www.ziprecruiter.com/jobs/*",
-        "https://jobs.google.com/jobs*",
-        "https://www.careerbuilder.com/job/*",
-        "https://www.simplyhired.com/job/*",
-        "https://www.dice.com/jobs/detail/*",
-        "https://stackoverflow.com/jobs/*",
-        "https://angel.co/company/*/jobs/*",
-        "https://wellfound.com/company/*/jobs/*",
-        "https://remote.co/job/*",
-        "https://remoteok.io/remote-jobs/*",
-        "https://weworkremotely.com/remote-jobs/*",
-        "https://flexjobs.com/jobs/*",
-        "https://upwork.com/freelance-jobs/*",
-        "https://www.freelancer.com/projects/*",
-        "https://www.fiverr.com/gigs/*"
-      ],
-      "js": ["content.js"],
-      "css": ["content.css"],
-      "run_at": "document_end"
-    }
-  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
   "author": "SpotGhost Team",
   "homepage_url": "https://spotghost.com"
 }

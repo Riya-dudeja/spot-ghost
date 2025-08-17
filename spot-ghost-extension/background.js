@@ -13,8 +13,13 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     showNotifications: true,
     autoScan: true,
     extensionEnabled: true,
-    apiEndpoint: 'http://localhost:3000',
-    lastUpdate: Date.now()
+    apiEndpoint: 'https://spot-ghost-jobs.vercel.app',
+    lastUpdate: Date.now(),
+    userConsent: {
+      dataCollection: false,
+      permissions: {},
+      consentDate: null
+    }
   });
   
   // Show welcome notification
@@ -30,20 +35,57 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   await updateScamCompaniesDatabase();
 });
 
-// Handle tab updates for real-time analysis
+// Handle extension icon click - open side panel
+chrome.action.onClicked.addListener(async (tab) => {
+  console.log('SpotGhost: Extension icon clicked, opening side panel');
+  
+  try {
+    // Open side panel
+    await chrome.sidePanel.open({ tabId: tab.id });
+    console.log('SpotGhost: Side panel opened successfully');
+  } catch (error) {
+    console.error('SpotGhost: Failed to open side panel:', error);
+    
+    // Fallback: open popup in new tab if side panel fails
+    try {
+      await chrome.tabs.create({
+        url: chrome.runtime.getURL('sidepanel.html'),
+        active: true
+      });
+    } catch (fallbackError) {
+      console.error('SpotGhost: Fallback also failed:', fallbackError);
+    }
+  }
+});
+
+// Listen for tab updates to check if we should show page action
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   if (changeInfo.status === 'complete' && tab.url) {
-    const settings = await chrome.storage.local.get(['realTimeAnalysis', 'extensionEnabled']);
+    const settings = await chrome.storage.local.get(['realTimeAnalysis', 'extensionEnabled', 'userConsent']);
     
-    if (settings.extensionEnabled && settings.realTimeAnalysis && isJobSite(tab.url)) {
-      // Inject real-time analysis
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tabId },
-          function: initializeRealTimeAnalysis
-        });
-      } catch (error) {
-        console.error('Failed to inject real-time analysis:', error);
+    // Only inject if user has given consent and we have permissions
+    if (settings.extensionEnabled && 
+        settings.realTimeAnalysis && 
+        settings.userConsent?.dataCollection && 
+        isJobSite(tab.url)) {
+      
+      // Check if we have permissions for this site
+      const hostname = new URL(tab.url).hostname;
+      const hasPermission = await chrome.permissions.contains({
+        origins: [`https://${hostname}/*`],
+        permissions: ['scripting']
+      });
+      
+      if (hasPermission) {
+        // Inject real-time analysis
+        try {
+          await chrome.scripting.executeScript({
+            target: { tabId: tabId },
+            function: initializeRealTimeAnalysis
+          });
+        } catch (error) {
+          console.error('Failed to inject real-time analysis:', error);
+        }
       }
     }
   }
@@ -227,55 +269,118 @@ function showWarningOverlay(flags) {
 // Handle job analysis requests
 async function handleJobAnalysis(jobData, sendResponse) {
   try {
+    console.log('🔍 Starting job analysis for:', jobData?.title || 'Unknown Job');
+    
     const settings = await chrome.storage.local.get(['apiEndpoint']);
-    const apiUrl = `${settings.apiEndpoint || 'http://localhost:3000'}/api/jobs/analyze`;
+    const apiUrl = `${settings.apiEndpoint || 'https://spot-ghost-jobs.vercel.app'}/api/jobs/analyze`;
     
     // Check cache first
-    const cacheKey = generateCacheKey(jobData);
-    const cached = await getCachedResult(cacheKey);
-    
-    if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
-      sendResponse({ success: true, analysis: cached.data, cached: true });
-      return;
+    let cacheKey;
+    try {
+      cacheKey = generateCacheKey(jobData);
+      const cached = await getCachedResult(cacheKey);
+      
+      if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
+        console.log('📦 Returning cached analysis');
+        sendResponse({ success: true, analysis: cached.data, cached: true });
+        return;
+      }
+    } catch (cacheError) {
+      console.warn('Cache check failed:', cacheError);
+      // Continue without cache
     }
+    
+    // Prepare analysis payload
+    const payload = {
+      ...jobData,
+      method: 'manual',
+      // Ensure required fields
+      jobTitle: jobData.title || '',
+      company: jobData.company || '',
+      description: jobData.description || '',
+      location: jobData.location || '',
+      salary: jobData.salary || '',
+      requirements: jobData.requirements || '',
+      contactEmail: jobData.contactEmail || '',
+      applicationUrl: jobData.applicationUrl || jobData.sourceURL || ''
+    };
+    
+    console.log('📡 Sending analysis request to:', apiUrl);
     
     // Perform analysis
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...jobData, method: 'manual' })
+      body: JSON.stringify(payload)
     });
     
-    const result = await response.json();
-    
-    if (response.ok) {
-      // Cache the result
-      await cacheResult(cacheKey, result);
-      
-      // Show notification if high risk
-      const riskLevel = result.job?.classicAnalysis?.riskLevel;
-      if (riskLevel === 'High' || riskLevel === 'Critical') {
-        chrome.notifications.create({
-          type: 'basic',
-          title: '🚨 High Risk Job Detected',
-          message: `This job has a ${riskLevel.toLowerCase()} risk level. Please review the analysis carefully.`
-        });
-      }
-      
-      sendResponse({ success: true, analysis: result });
-    } else {
-      sendResponse({ success: false, error: result.error });
+    if (!response.ok) {
+      throw new Error(`Server error: ${response.status} ${response.statusText}`);
     }
+    
+    const result = await response.json();
+    console.log('✅ Analysis completed successfully');
+    
+    // Cache the result if we have a cache key
+    if (cacheKey) {
+      try {
+        await cacheResult(cacheKey, result);
+      } catch (cacheError) {
+        console.warn('Cache save failed:', cacheError);
+        // Continue without caching
+      }
+    }
+    
+    // Show notification if high risk
+    const riskLevel = result.job?.classicAnalysis?.riskLevel;
+    if (riskLevel === 'High' || riskLevel === 'Critical') {
+      chrome.notifications.create({
+        type: 'basic',
+        title: '🚨 High Risk Job Detected',
+        message: `This job has a ${riskLevel.toLowerCase()} risk level. Please review the analysis carefully.`
+      });
+    }
+    
+    sendResponse({ success: true, analysis: result });
   } catch (error) {
-    console.error('Analysis error:', error);
-    sendResponse({ success: false, error: error.message });
+    console.error('❌ Analysis error:', error);
+    
+    let errorMessage = 'Analysis failed';
+    if (error.message.includes('fetch')) {
+      errorMessage = 'Cannot connect to analysis server. Check your internet connection.';
+    } else if (error.message.includes('Server error: 5')) {
+      errorMessage = 'Analysis server is temporarily unavailable. Please try again.';
+    } else if (error.message.includes('btoa') || error.message.includes('Latin1')) {
+      errorMessage = 'Job data contains unsupported characters. This has been fixed, please try again.';
+    } else {
+      errorMessage = error.message || 'Unknown error occurred during analysis';
+    }
+    
+    sendResponse({ success: false, error: errorMessage });
   }
 }
 
 // Generate cache key for job data
 function generateCacheKey(jobData) {
-  const key = `${jobData.title}-${jobData.company}-${jobData.description?.substring(0, 100)}`;
-  return btoa(key).replace(/[^a-zA-Z0-9]/g, '').substring(0, 50);
+  try {
+    const key = `${jobData.title || ''}-${jobData.company || ''}-${(jobData.description || '').substring(0, 100)}`;
+    
+    // Use a simple hash function instead of btoa to handle Unicode
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+      const char = key.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    // Convert to positive number and then to base36 for a short string
+    const hashStr = Math.abs(hash).toString(36);
+    return hashStr.substring(0, 20); // Limit to 20 characters
+  } catch (error) {
+    console.warn('Cache key generation error:', error);
+    // Fallback: use timestamp as cache key
+    return Date.now().toString(36);
+  }
 }
 
 // Cache analysis result
@@ -306,7 +411,7 @@ async function getCachedAnalysis(jobId, sendResponse) {
 async function handleScamReport(reportData, sendResponse) {
   try {
     const settings = await chrome.storage.local.get(['apiEndpoint']);
-    const apiUrl = `${settings.apiEndpoint || 'http://localhost:3000'}/api/report-scam`;
+    const apiUrl = `${settings.apiEndpoint || 'https://spot-ghost-jobs.vercel.app'}/api/report-scam`;
     
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -374,7 +479,7 @@ async function checkCompanyReputation(company, sendResponse) {
 async function updateScamCompaniesDatabase() {
   try {
     // Temporarily disabled - endpoint not implemented yet
-    console.log('Scam companies database update skipped - endpoint not available');
+    console.log('SpotGhost: Scam companies database update skipped (feature in development)');
     
     // Set empty array as placeholder
     await chrome.storage.local.set({
@@ -382,7 +487,7 @@ async function updateScamCompaniesDatabase() {
       lastDatabaseUpdate: Date.now()
     });
   } catch (error) {
-    console.error('Failed to update scam companies database:', error);
+    console.error('SpotGhost: Failed to update scam companies database:', error);
   }
 }
 
@@ -415,5 +520,5 @@ async function cleanupCache() {
 // Run cleanup every hour
 setInterval(cleanupCache, 60 * 60 * 1000);
 
-// Update scam database every 6 hours
-setInterval(updateScamCompaniesDatabase, 6 * 60 * 60 * 1000);
+// Update scam database every 6 hours (disabled until endpoint is ready)
+// setInterval(updateScamCompaniesDatabase, 6 * 60 * 60 * 1000);

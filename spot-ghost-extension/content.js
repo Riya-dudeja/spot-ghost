@@ -1,11 +1,8 @@
-// SpotGhost Universal Job Extractor
-// Supports LinkedIn, Indeed, Glassdoor, Monster, ZipRecruiter, and more
-
 // Platform detection and extraction configuration
 const PLATFORMS = {
   linkedin: {
   name: 'LinkedIn',
-  patterns: ['linkedin.com/jobs'],
+  patterns: ['linkedin.com'],
   extractors: {
     title: [
       'h1.top-card-layout__title',
@@ -213,6 +210,40 @@ const PLATFORMS = {
         '.salary'
       ]
     }
+  },
+  uplers: {
+    name: 'Uplers',
+    patterns: ['uplers.com'],
+    extractors: {
+      title: [
+        'h1',
+        '.job-title',
+        '[class*="title"]',
+        '.position-title'
+      ],
+      company: [
+        '.company-name',
+        '[class*="company"]',
+        '.employer-name'
+      ],
+      description: [
+        '.job-description',
+        '[class*="description"]',
+        '.job-details',
+        'main',
+        '.content'
+      ],
+      location: [
+        '.job-location',
+        '[class*="location"]',
+        '.address'
+      ],
+      salary: [
+        '.salary',
+        '[class*="salary"]',
+        '.compensation'
+      ]
+    }
   }
 };
 
@@ -234,12 +265,11 @@ function detectPlatform() {
   return null;
 }
 
-// Universal job data extractor
-function extractJobData() {
-  const platform = detectPlatform();
-  if (!platform) {
-    throw new Error('Unsupported platform');
-  }
+// Generic job data extractor for non-platform sites
+function extractJobDataGeneric() {
+  console.log('SpotGhost: Using generic extraction for non-platform site');
+  
+  const actualJobUrl = getActualJobUrl();
   
   const jobData = {
     title: '',
@@ -256,15 +286,67 @@ function extractJobData() {
     postedDate: '',
     applicationDeadline: '',
     contactEmail: '',
-    applicationUrl: window.location.href,
-    sourceURL: window.location.href,
-    platform: platform.name,
+    applicationUrl: actualJobUrl,
+    sourceURL: actualJobUrl,
+    platform: 'Generic Website',
     extractedAt: new Date().toISOString()
   };
   
-  // Extract core fields using platform-specific selectors
-  for (const [field, selectors] of Object.entries(platform.extractors)) {
-    jobData[field] = extractTextFromSelectors(selectors);
+  // Generic selectors that work on most websites
+  const genericSelectors = {
+    title: [
+      'h1', 
+      'h2',
+      '[class*="title"]',
+      '[class*="job-title"]',
+      '[class*="position"]',
+      '.title',
+      '.job-title',
+      '.position-title'
+    ],
+    company: [
+      '[class*="company"]',
+      '[class*="employer"]',
+      '[class*="organization"]',
+      '.company',
+      '.company-name',
+      '.employer',
+      '.organization'
+    ],
+    description: [
+      '[class*="description"]',
+      '[class*="content"]',
+      '[class*="details"]',
+      '.description',
+      '.job-description',
+      '.content',
+      '.details',
+      'main',
+      'article',
+      '.main-content'
+    ],
+    location: [
+      '[class*="location"]',
+      '[class*="address"]',
+      '[class*="city"]',
+      '.location',
+      '.address',
+      '.city'
+    ]
+  };
+  
+  // Extract using generic selectors
+  for (const [field, selectors] of Object.entries(genericSelectors)) {
+    const extractedValue = extractTextFromSelectors(selectors);
+    jobData[field] = extractedValue;
+    console.log(`SpotGhost Generic: Extracted ${field}:`, extractedValue ? extractedValue.substring(0, 100) + '...' : 'EMPTY');
+  }
+  // Do NOT use fallback location extraction to avoid picking up irrelevant page locations
+  if (!jobData.location || jobData.location.length < 3) {
+    console.log('SpotGhost Generic: Location extraction failed, leaving as empty.');
+    jobData.location = '';
+  } else {
+    console.log('SpotGhost Generic: Primary location extraction successful:', jobData.location);
   }
   
   // Extract additional fields with generic selectors
@@ -280,13 +362,234 @@ function extractJobData() {
   return cleanJobData(jobData);
 }
 
+// Universal job data extractor
+function extractJobData() {
+  const platform = detectPlatform();
+  
+  // If no specific platform detected, use generic extraction
+  if (!platform) {
+    console.log('SpotGhost: No specific platform detected, using generic extraction...');
+    return extractJobDataGeneric();
+  }
+  
+  // Get the actual job URL (important for LinkedIn)
+  const actualJobUrl = getActualJobUrl();
+  
+  const jobData = {
+    title: '',
+    company: '',
+    description: '',
+    location: '',
+    salary: '',
+    requirements: '',
+    qualifications: '',
+    benefits: '',
+    jobType: '',
+    experienceLevel: '',
+    companySize: '',
+    postedDate: '',
+    applicationDeadline: '',
+    contactEmail: '',
+    applicationUrl: actualJobUrl,
+    sourceURL: actualJobUrl,
+    platform: platform.name,
+    extractedAt: new Date().toISOString()
+  };
+  
+  // Extract core fields using platform-specific selectors
+  for (const [field, selectors] of Object.entries(platform.extractors)) {
+    const extractedValue = extractTextFromSelectors(selectors);
+    jobData[field] = extractedValue;
+    console.log(`SpotGhost: Extracted ${field}:`, extractedValue ? extractedValue.substring(0, 100) + '...' : 'EMPTY');
+  }
+  // Do NOT use fallback location extraction to avoid picking up irrelevant page locations
+  if (!jobData.location || jobData.location.length < 3) {
+    console.log('SpotGhost: Location extraction failed, leaving as empty.');
+    jobData.location = '';
+  } else {
+    console.log('SpotGhost: Primary location extraction successful:', jobData.location);
+  }
+  
+  // Extract additional fields with generic selectors
+  jobData.requirements = extractRequirements();
+  jobData.qualifications = extractQualifications();
+  jobData.benefits = extractBenefits();
+  jobData.jobType = extractJobType();
+  jobData.experienceLevel = extractExperienceLevel();
+  jobData.postedDate = extractPostedDate();
+  jobData.contactEmail = extractContactEmail();
+  
+  // Clean and validate data
+  return cleanJobData(jobData);
+}
+
+// Get the actual job URL, handling LinkedIn's complex URL structure
+function getActualJobUrl() {
+  const currentUrl = window.location.href;
+  
+  console.log('SpotGhost: Original URL:', currentUrl);
+  
+  // Handle LinkedIn job URLs
+  if (currentUrl.includes('linkedin.com')) {
+    // Check for currentJobId parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const jobId = urlParams.get('currentJobId');
+    
+    console.log('SpotGhost: LinkedIn currentJobId from URL params:', jobId);
+    
+    if (jobId) {
+      const cleanJobUrl = `https://www.linkedin.com/jobs/view/${jobId}`;
+      console.log('SpotGhost: Constructed clean LinkedIn URL:', cleanJobUrl);
+      return cleanJobUrl;
+    }
+    
+    // Check if we're already on a direct job view URL
+    const jobViewMatch = currentUrl.match(/linkedin\.com\/jobs\/view\/(\d+)/);
+    if (jobViewMatch) {
+      const cleanUrl = currentUrl.split('?')[0]; // Remove query parameters
+      console.log('SpotGhost: Direct job view URL cleaned:', cleanUrl);
+      return cleanUrl;
+    }
+    
+    // Try to find job ID in URL path
+    const pathJobMatch = currentUrl.match(/\/(\d{8,})/);
+    if (pathJobMatch) {
+      const constructedUrl = `https://www.linkedin.com/jobs/view/${pathJobMatch[1]}`;
+      console.log('SpotGhost: Constructed URL from path job ID:', constructedUrl);
+      return constructedUrl;
+    }
+    
+    console.log('SpotGhost: No LinkedIn job ID found, using original URL');
+  }
+  
+  // For other platforms or if no specific handling needed
+  const cleanUrl = currentUrl.split('?')[0]; // Remove query parameters for cleaner URLs
+  console.log('SpotGhost: Final clean URL:', cleanUrl);
+  return cleanUrl;
+}
+
+// Enhanced location extraction with multiple fallback strategies
+function extractLocationWithFallbacks() {
+  console.log('SpotGhost: Attempting enhanced location extraction...');
+  
+  // Generic location selectors that work across multiple platforms
+  const genericLocationSelectors = [
+    '[class*="location"]',
+    '[data-testid*="location"]', 
+    '[data-test*="location"]',
+    '[aria-label*="location"]',
+    '[class*="job-location"]',
+    '[class*="jobLocation"]',
+    '[id*="location"]',
+    '.location',
+    '.job-location',
+    '.address',
+    '[class*="address"]',
+    '[class*="city"]',
+    '[class*="state"]',
+    '[class*="country"]'
+  ];
+  
+  // Try generic selectors first
+  for (const selector of genericLocationSelectors) {
+    try {
+      const elements = document.querySelectorAll(selector);
+      for (const element of elements) {
+        if (element && element.textContent) {
+          const text = cleanText(element.textContent);
+          if (text.length > 3 && text.length < 100 && 
+              !text.toLowerCase().includes('sign in') && 
+              !text.toLowerCase().includes('follow') &&
+              !text.toLowerCase().includes('apply') &&
+              (text.includes(',') || text.match(/\b(city|state|country|remote|hybrid)\b/i))) {
+            console.log(`SpotGhost: Found location via selector "${selector}":`, text);
+            return text;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`SpotGhost: Selector failed - ${selector}:`, error);
+    }
+  }
+  
+  // Try searching for location patterns in text content
+  const pageText = document.body.textContent;
+  
+  // Look for location patterns: "City, State", "City, Country", etc.
+  const locationPatterns = [
+    /([A-Z][a-zA-Z\s]{2,30}),\s*([A-Z][a-zA-Z\s]{2,30})/g, // City, State/Country
+    /([A-Z][a-zA-Z\s]{2,20})\s*[-–]\s*([A-Z][a-zA-Z\s]{2,20})/g, // City - State
+    /(Remote|Hybrid|Work from home)/gi, // Remote work indicators
+    /([A-Z][a-zA-Z\s]{3,30}),\s*([A-Z]{2})\b/g, // City, State (2-letter state code)
+    /\b([A-Z][a-zA-Z\s]{3,20}),\s*([A-Z][a-zA-Z\s]{3,20}),\s*([A-Z][a-zA-Z\s]{3,20})\b/g // City, State, Country
+  ];
+  
+  for (const pattern of locationPatterns) {
+    const matches = [...pageText.matchAll(pattern)];
+    for (const match of matches) {
+      const potentialLocation = match[0].trim();
+      if (potentialLocation.length > 5 && potentialLocation.length < 80) {
+        console.log(`SpotGhost: Found location via pattern matching:`, potentialLocation);
+        return potentialLocation;
+      }
+    }
+  }
+  
+  // Try looking for location information in structured data (JSON-LD, microdata)
+  const jsonLdScripts = document.querySelectorAll('script[type="application/ld+json"]');
+  for (const script of jsonLdScripts) {
+    try {
+      const data = JSON.parse(script.textContent);
+      if (data.jobLocation || data.address || (data.location && data.location.address)) {
+        const location = data.jobLocation?.address?.addressLocality || 
+                         data.jobLocation?.address?.addressRegion ||
+                         data.address?.addressLocality ||
+                         data.address?.addressRegion ||
+                         data.location?.address?.addressLocality ||
+                         data.location?.name;
+        if (location && typeof location === 'string' && location.length > 2) {
+          console.log('SpotGhost: Found location in structured data:', location);
+          return location;
+        }
+      }
+    } catch (error) {
+      // Invalid JSON, skip
+    }
+  }
+  
+  console.log('SpotGhost: Enhanced location extraction failed, no location found');
+  return 'Unknown Location';
+}
+
 // Extract text using multiple selectors (fallback approach)
 function extractTextFromSelectors(selectors) {
   for (const selector of selectors) {
     try {
       const element = document.querySelector(selector);
       if (element && element.textContent.trim()) {
-        return cleanText(element.textContent);
+        // Wait for element to be fully loaded for LinkedIn's dynamic content
+        if (window.location.href.includes('linkedin.com')) {
+          // For LinkedIn, sometimes content loads asynchronously
+          let attempts = 0;
+          while (attempts < 3 && element.textContent.trim().length < 10) {
+            setTimeout(() => {}, 100); // Small delay
+            attempts++;
+          }
+        }
+        let text = cleanText(element.textContent);
+        // Strictly filter out generic country names for location field
+        if (selector.toLowerCase().includes('location') || selector.toLowerCase().includes('bullet')) {
+          const genericCountries = [
+            'united states', 'usa', 'us', 'india', 'canada', 'united kingdom', 'uk', 'remote', 'worldwide', 'global'
+          ];
+          const textLower = text.toLowerCase().trim();
+          // If the text is only a generic country name (with or without whitespace), ignore it completely
+          if (genericCountries.includes(textLower)) {
+            // Set location to empty and skip
+            return '';
+          }
+        }
+        return text;
       }
     } catch (error) {
       console.warn(`SpotGhost: Selector failed - ${selector}:`, error);
@@ -463,10 +766,14 @@ function extractContactEmail() {
 }
 
 function cleanText(text) {
+  if (!text) return '';
+  
   return text
     .replace(/\s+/g, ' ')           // Multiple spaces to single space
-    .replace(/\n+/g, '\n')          // Multiple newlines to single newline  
-    .replace(/(.+?)(\1)+/g, '$1')   // Remove duplicate sentences
+    .replace(/\n+/g, '\n')          // Multiple newlines to single newline
+    .replace(/\t+/g, ' ')           // Replace tabs with spaces
+    .replace(/\r/g, '')             // Remove carriage returns
+    .replace(/(.{100,}?)\1+/g, '$1') // Remove duplicate long text blocks (more conservative)
     .trim();
 }
 
@@ -475,21 +782,72 @@ function cleanJobData(jobData) {
   // Remove empty fields and normalize data
   for (const [key, value] of Object.entries(jobData)) {
     if (typeof value === 'string') {
-      jobData[key] = cleanText(value);
+      let cleanedValue = value;
       
-      // Remove if too short to be meaningful
-      if (key !== 'sourceURL' && key !== 'applicationUrl' && value.length < 2) {
+      // Don't clean URLs - preserve them as-is
+      if (key === 'sourceURL' || key === 'applicationUrl') {
+        // Just trim whitespace for URLs
+        cleanedValue = value.trim();
+      } else {
+        // Clean the text and handle Unicode properly for other fields
+        cleanedValue = cleanText(value);
+        
+        // Remove or replace problematic Unicode characters that might cause issues
+        cleanedValue = cleanedValue
+          .replace(/[\u2018\u2019]/g, "'")  // Smart quotes to regular quotes
+          .replace(/[\u201C\u201D]/g, '"')  // Smart double quotes
+          .replace(/[\u2013\u2014]/g, '-')  // Em/en dashes to regular dash
+          .replace(/[\u2026]/g, '...')      // Ellipsis
+          .replace(/[^\x20-\x7E\u00A0-\u024F\u1E00-\u1EFF]/g, '') // Keep only common Latin characters
+          .trim();
+      }
+      
+      jobData[key] = cleanedValue;
+      
+      // Remove if too short to be meaningful (but not URLs)
+      if (key !== 'sourceURL' && key !== 'applicationUrl' && cleanedValue.length < 2) {
         jobData[key] = '';
       }
     }
   }
   
-  // Validate required fields
+  // Set fallback values for missing data
   if (!jobData.title || jobData.title.length < 3) {
+    jobData.title = 'Unknown Job';
+  }
+
+  if (!jobData.company || jobData.company.length < 2) {
+    jobData.company = 'Unknown Company';
+  }
+
+  // --- Improved location extraction for onboarding/remote/India ---
+  const desc = (jobData.description || '').toLowerCase();
+  let overrideLocation = '';
+  if ((desc.includes('onboarding') && (desc.includes('india') || desc.includes('delhi') || desc.includes('bangalore')))) {
+    overrideLocation = 'India (Onboarding), Remote';
+  } else if (desc.includes('remote') || desc.includes('work from anywhere') || desc.includes('work from home')) {
+    overrideLocation = 'Remote';
+  }
+  if (overrideLocation) {
+    jobData.location = overrideLocation;
+  } else if (!jobData.location || jobData.location.length < 3) {
+    jobData.location = 'Unknown Location';
+  }
+  
+  // Validate and fix URLs
+  if (jobData.applicationUrl && !jobData.applicationUrl.startsWith('http')) {
+    jobData.applicationUrl = window.location.href;
+  }
+  if (jobData.sourceURL && !jobData.sourceURL.startsWith('http')) {
+    jobData.sourceURL = window.location.href;
+  }
+  
+  // Validate required fields - now check against fallback values
+  if (jobData.title === 'Unknown Job') {
     throw new Error('Job title not found or too short');
   }
   
-  if (!jobData.company || jobData.company.length < 2) {
+  if (jobData.company === 'Unknown Company') {
     throw new Error('Company name not found or too short');
   }
   
@@ -497,70 +855,54 @@ function cleanJobData(jobData) {
     throw new Error('Job description not found or too short');
   }
   
+  // Log the cleaned data for debugging
+  console.log('SpotGhost Content: Cleaned job data:', {
+    title: jobData.title?.substring(0, 50) + '...',
+    company: jobData.company,
+    descriptionLength: jobData.description?.length || 0,
+    applicationUrl: jobData.applicationUrl,
+    sourceURL: jobData.sourceURL
+  });
+  
   return jobData;
 }
 
 // Real-time analysis and UI injection
 function initializeRealTimeFeatures() {
-  // Add floating analysis button
-  addFloatingAnalysisButton();
+  console.log('SpotGhost Content: Initializing real-time features...');
   
-  // Add inline risk indicators
-  addInlineRiskIndicators();
+  // Remove any existing floating buttons and UI elements first
+  const existingButton = document.getElementById('spotghost-floating-btn');
+  if (existingButton) {
+    existingButton.remove();
+    console.log('SpotGhost: Removed existing floating button');
+  }
   
-  // Auto-scan for critical red flags
-  setTimeout(performAutoScan, 3000);
-}
-
-// Add floating analysis button
-function addFloatingAnalysisButton() {
-  if (document.getElementById('spotghost-floating-btn')) return;
-  
-  const button = document.createElement('div');
-  button.id = 'spotghost-floating-btn';
-  button.innerHTML = `
-    <div class="spotghost-btn">
-      <div class="spotghost-icon">🛡️</div>
-      <div class="spotghost-text">Analyze Job</div>
-    </div>
-  `;
-  
-  button.addEventListener('click', () => {
-    analyzeCurrentJob();
+  // Remove any existing warning banners
+  const existingWarnings = document.querySelectorAll('.spotghost-warning-container');
+  existingWarnings.forEach(warning => {
+    warning.remove();
+    console.log('SpotGhost: Removed existing warning banner');
   });
   
-  document.body.appendChild(button);
-}
-
-// Add inline risk indicators next to job elements
-function addInlineRiskIndicators() {
-  const platform = detectPlatform();
-  if (!platform) return;
+  // Remove any existing styles that might contain floating button CSS
+  const existingStyles = document.getElementById('spotghost-styles');
+  if (existingStyles) {
+    existingStyles.remove();
+    console.log('SpotGhost: Removed existing styles');
+  }
   
-  // Add risk indicator next to company name
-  const companyElement = document.querySelector(platform.extractors.company[0]);
-  if (companyElement) {
-    const indicator = document.createElement('span');
-    indicator.className = 'spotghost-risk-indicator';
-    indicator.innerHTML = '🔍';
-    indicator.title = 'Click to check company reputation';
-    indicator.addEventListener('click', () => checkCompanyReputation(companyElement.textContent));
-    companyElement.appendChild(indicator);
-  }
-}
-
-// Perform automatic scan for red flags
-function performAutoScan() {
-  try {
-    const jobData = extractJobData();
-    const quickScan = performQuickRiskScan(jobData);
-    
-    if (quickScan.riskLevel === 'High' || quickScan.riskLevel === 'Critical') {
-      showQuickWarning(quickScan);
-    }
-  } catch (error) {
-    console.warn('SpotGhost: Auto-scan failed:', error);
-  }
+  // DON'T inject enhanced styles that contain floating button CSS
+  // injectEnhancedStyles();
+  
+  const platform = detectPlatform();
+  console.log('SpotGhost Content: Detected platform:', platform?.name || 'Unknown');
+  
+  // DISABLED: All UI features disabled for side panel mode
+  // addInlineRiskIndicators();
+  // setTimeout(performAutoScan, 3000);
+  
+  console.log('SpotGhost Content: Real-time features initialized (all UI features disabled for side panel)');
 }
 
 // Quick risk scan for immediate feedback
@@ -597,12 +939,21 @@ function performQuickRiskScan(jobData) {
     riskScore += 20;
   }
   
-  // Missing key information
-  if (!jobData.location) {
+  // Improved: Do not flag location contradiction if location was overridden to 'India (Onboarding), Remote' or 'Remote'
+  const location = (jobData.location || '').toLowerCase();
+  if (!location || location === 'unknown location') {
     redFlags.push('No location specified');
     riskScore += 15;
   }
-  
+  // Do not flag contradiction if location is 'india (onboarding), remote' or 'remote'
+  else if (
+    location !== 'india (onboarding), remote' &&
+    location !== 'remote' &&
+    location !== 'remote, india (onboarding)'
+  ) {
+    // (If you want to keep the contradiction logic, add it here, but skip for these cases)
+  }
+
   if (!jobData.requirements && !jobData.qualifications) {
     redFlags.push('No job requirements specified');
     riskScore += 15;
@@ -623,40 +974,10 @@ function performQuickRiskScan(jobData) {
   };
 }
 
-// Show quick warning for high-risk jobs
+// Show quick warning for high-risk jobs (DISABLED for side panel mode)
 function showQuickWarning(scanResult) {
-  if (document.getElementById('spotghost-quick-warning')) return;
-  
-  const warning = document.createElement('div');
-  warning.id = 'spotghost-quick-warning';
-  warning.className = 'spotghost-warning';
-  warning.innerHTML = `
-    <div class="spotghost-warning-content">
-      <div class="spotghost-warning-header">
-        <span class="spotghost-warning-icon">⚠️</span>
-        <span class="spotghost-warning-title">Potential Risk Detected</span>
-        <button class="spotghost-warning-close" onclick="this.parentElement.parentElement.parentElement.remove()">×</button>
-      </div>
-      <div class="spotghost-warning-body">
-        <p>This job posting has been flagged with <strong>${scanResult.riskLevel}</strong> risk level.</p>
-        <ul>
-          ${scanResult.redFlags.map(flag => `<li>${flag}</li>`).join('')}
-        </ul>
-        <button class="spotghost-analyze-btn" onclick="analyzeCurrentJob()">
-          Get Detailed Analysis
-        </button>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(warning);
-  
-  // Auto-hide after 10 seconds
-  setTimeout(() => {
-    if (warning.parentElement) {
-      warning.remove();
-    }
-  }, 10000);
+  console.log('SpotGhost: Quick warning disabled in side panel mode');
+  return;
 }
 
 // Analyze current job (triggered by user action)
@@ -675,7 +996,8 @@ async function analyzeCurrentJob() {
       hideAnalysisLoading();
       
       if (response && response.success) {
-        showAnalysisResults(response.analysis);
+        // Results will be shown in side panel - no need for modal popup
+        console.log('SpotGhost: Analysis complete, results shown in side panel');
       } else {
         showAnalysisError(response?.error || 'Analysis failed');
       }
@@ -721,15 +1043,17 @@ function hideAnalysisLoading() {
   if (loading) loading.remove();
 }
 
-// Show analysis results
+// Show analysis results (Modified for side panel integration)
 function showAnalysisResults(analysis) {
   console.log('SpotGhost Analysis Results:', analysis);
   
-  // For now, show a simple alert - this will be enhanced with a proper modal
-  const riskLevel = analysis.job?.classicAnalysis?.riskLevel || 'Unknown';
-  const safetyScore = analysis.job?.classicAnalysis?.safetyScore || 0;
-  
-  alert(`SpotGhost Analysis Complete!\n\nSafety Score: ${safetyScore}/100\nRisk Level: ${riskLevel}\n\nCheck the extension popup for detailed results.`);
+  // Only send results to side panel, do not show any modal or floating button
+  chrome.runtime.sendMessage({
+    action: 'analysisComplete',
+    data: analysis
+  }, (response) => {
+    console.log('SpotGhost: Analysis results sent to side panel');
+  });
 }
 
 // Show analysis error
@@ -739,21 +1063,36 @@ function showAnalysisError(error) {
 
 // Message listener for popup communication
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'extractJob') {
-    try {
-      const jobData = extractJobData();
-      sendResponse(jobData);
-    } catch (error) {
-      sendResponse({ error: error.message });
+  try {
+    if (message.action === 'ping') {
+      sendResponse({ status: 'ready', platform: detectPlatform()?.name || 'unknown' });
+      return true;
     }
+    
+    if (message.action === 'extractJob') {
+      const jobData = extractJobData();
+      console.log('SpotGhost Content: Job data extracted:', jobData);
+      sendResponse(jobData);
+      return true;
+    }
+  } catch (error) {
+    console.error('SpotGhost Content: Message handling error:', error);
+    sendResponse({ error: error.message });
   }
   return true;
 });
 
 // Initialize when page loads
+console.log('SpotGhost Content: Script loaded, document state:', document.readyState);
+
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', initializeRealTimeFeatures);
+  console.log('SpotGhost Content: Waiting for DOMContentLoaded...');
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('SpotGhost Content: DOMContentLoaded fired');
+    initializeRealTimeFeatures();
+  });
 } else {
+  console.log('SpotGhost Content: Document already ready, initializing immediately');
   initializeRealTimeFeatures();
 }
 
