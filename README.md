@@ -1,6 +1,3 @@
-
-# SpotGhost
-
 # SpotGhost
 
 Live Demo: [spot-ghost-jobs.vercel.app](https://spot-ghost-jobs.vercel.app)
