@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "SpotGhost - Universal Job Scam Detector",
   "version": "2.0.0",
-  "description": "AI-powered job scam detection across LinkedIn, Indeed, Glassdoor, Monster, and more. Protect yourself from fraudulent job postings.",
+  "description": "AI-powered job scam detection across LinkedIn, Indeed, and more. Protect yourself from fraudulent job postings.",
   "permissions": [
     "activeTab", 
     "storage", 
@@ -12,31 +12,12 @@
   "optional_permissions": [
     "scripting"
   ],
-  "optional_host_permissions": [
-    "https://www.linkedin.com/*",
-    "https://www.indeed.com/*",
-    "https://www.glassdoor.com/*",
-    "https://www.monster.com/*",
-    "https://www.ziprecruiter.com/*",
-    "https://jobs.google.com/*",
-    "https://www.careerbuilder.com/*",
-    "https://www.simplyhired.com/*",
-    "https://www.dice.com/*",
-    "https://stackoverflow.com/jobs/*",
-    "https://angel.co/*",
-    "https://wellfound.com/*",
-    "https://remote.co/*",
-    "https://remoteok.io/*",
-    "https://weworkremotely.com/*",
-    "https://flexjobs.com/*",
-    "https://upwork.com/*",
-    "https://www.freelancer.com/*",
-    "https://www.fiverr.com/*"
-  ],
+  "optional_host_permissions": [],
   "host_permissions": [
-    "https://spot-ghost-jobs.vercel.app/*",
-    "https://*.spotghost.com/*"
-  ],
+  "https://spot-ghost-jobs.vercel.app/*",
+  "https://*.spotghost.com/*",
+  "<all_urls>"
+    ],
   "background": {
     "service_worker": "background.js"
   },
@@ -47,5 +28,36 @@
     "default_path": "sidepanel.html"
   },
   "author": "SpotGhost Team",
-  "homepage_url": "https://spotghost.com"
+  "homepage_url": "https://spot-ghost-jobs.vercel.app/",
+  "icons": {
+    "16": "icon.svg",
+    "32": "icon.svg",
+    "48": "icon.svg",
+    "128": "icon.svg"
+  }
+  ,
+  "content_scripts": [
+    {
+      "matches": [
+        "file://*/*",
+        "https://*.linkedin.com/*",
+        "https://*.indeed.com/*",
+        "https://*.glassdoor.com/*",
+        "https://*.monster.com/*",
+        "https://*.ziprecruiter.com/*",
+        "https://*.careerbuilder.com/*",
+        "https://*.dice.com/*",
+        "https://*.uplers.com/*",
+        "https://*.naukri.com/*",
+        "https://angel.co/*",
+        "https://wellfound.com/*",
+        "https://stackoverflow.com/jobs/*",
+        "https://jobs.google.com/*",
+        "https://*/*job*",
+        "https://*/*career*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }

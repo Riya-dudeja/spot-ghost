@@ -1,4 +1,13 @@
-// SpotGhost Side Panel JavaScript
+
+// Helper to check for valid HTTP/HTTPS URLs
+function isValidHttpUrl(url) {
+    try {
+        const u = new URL(url);
+        return u.protocol === "http:" || u.protocol === "https:";
+    } catch (e) {
+        return false;
+    }
+}
 
 // State management
 let currentState = 'welcome'; // welcome, loading, results, error, permissions
@@ -170,12 +179,33 @@ async function checkSitePermissions(url) {
 async function handlePermissionGrant() {
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        const hostname = new URL(tab.url).hostname;
-        
+        if (!tab || !tab.url) {
+            showError('No active tab or URL found');
+            return;
+        }
+        let hostname;
+        try {
+            hostname = new URL(tab.url).hostname;
+        } catch (e) {
+            showError('Invalid tab URL');
+            return;
+        }
+
+        // Check if the permission can be requested (must be in manifest)
+        const manifest = chrome.runtime.getManifest();
+        const hostPermissions = manifest.host_permissions || [];
+        const canRequest = hostPermissions.some(pattern =>
+            pattern === '<all_urls>' || (pattern.includes('*') ? hostname.endsWith(pattern.replace(/^[*.]+/, '')) : hostname === pattern)
+        );
+        if (!canRequest) {
+            showError('Cannot request permission for this site. Please check extension settings.');
+            return;
+        }
+
         const granted = await chrome.permissions.request({
             origins: [`https://${hostname}/*`]
         });
-        
+
         if (granted) {
             updateStatus('Permission granted', 'ready');
             showState('welcome');
@@ -196,46 +226,42 @@ function handlePermissionDeny() {
 // Start job analysis
 async function startAnalysis() {
     try {
+        // DEV: Always clear cached analysis before running new analysis
+        if (chrome && chrome.storage && chrome.storage.local) {
+            await new Promise(resolve => chrome.storage.local.clear(resolve));
+            console.log('SpotGhost: Cleared local cache before analysis');
+        }
         showState('loading');
         updateStatus('Analyzing job...', 'loading');
         updateLoadingStep('extract', 'active');
-        
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-        
-        if (!tab) {
-            throw new Error('No active tab found');
+        if (!tab || !isValidHttpUrl(tab.url)) {
+            showError('No valid tab URL found. Please open a job posting page.');
+            updateStatus('Analysis failed', 'error');
+            return;
         }
-        
         const platform = detectPlatform(tab.url);
-        
         if (!platform) {
-            throw new Error('Please navigate to a job posting page');
+            showError('Please navigate to a job posting page');
+            updateStatus('Analysis failed', 'error');
+            return;
         }
-        
         // Check permissions
         const hasPermission = await checkSitePermissions(tab.url);
         if (!hasPermission) {
             showState('permissions');
             return;
         }
-        
-        // Update loading status
         updateLoadingStatus('Extracting job information...');
-        
-        // Perform analysis
         const analysis = await performJobAnalysis(tab, platform);
-        
         updateLoadingStep('extract', 'completed');
         updateLoadingStep('ai', 'completed');
         updateLoadingStep('verify', 'completed');
         updateLoadingStep('complete', 'completed');
-        
-        // Show results
         currentAnalysis = analysis;
         displayAnalysisResults(analysis);
         showState('results');
         updateStatus('Analysis complete', 'ready');
-        
     } catch (error) {
         console.error('Analysis failed:', error);
         showError(error.message);
@@ -243,137 +269,61 @@ async function startAnalysis() {
     }
 }
 
-// Perform job analysis (reuse from popup.js)
+// Send a message to the content script to extract job data and perform analysis
 async function performJobAnalysis(tab, platform) {
-    // Test content script communication
-    let contentScriptReady = false;
-    
-    try {
-        const pingResult = await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Content script not responding')), 3000);
-            
-            chrome.tabs.sendMessage(tab.id, { action: 'ping' }, (response) => {
-                clearTimeout(timeout);
+    return new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(
+            tab.id,
+            { action: 'extractAndAnalyzeJob', platform: platform.name },
+            async (response) => {
                 if (chrome.runtime.lastError) {
-                    reject(new Error(`Chrome extension error: ${chrome.runtime.lastError.message}`));
-                } else if (response && response.status === 'ready') {
-                    resolve(response);
-                } else {
-                    reject(new Error('Content script not properly initialized'));
-                }
-            });
-        });
-        
-        contentScriptReady = true;
-    } catch (pingError) {
-        // Inject content script
-        try {
-            await chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                files: ['content.js']
-            });
-            
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('Injected content script not responding')), 3000);
-                
-                chrome.tabs.sendMessage(tab.id, { action: 'ping' }, (response) => {
-                    clearTimeout(timeout);
-                    if (chrome.runtime.lastError) {
-                        reject(new Error(`Post-injection error: ${chrome.runtime.lastError.message}`));
-                    } else if (response && response.status === 'ready') {
-                        resolve(response);
+                    // Fallback: Try to inject content script, then retry
+                    if (chrome.scripting && chrome.scripting.executeScript) {
+                        try {
+                            await chrome.scripting.executeScript({
+                                target: { tabId: tab.id },
+                                files: ['content.js']
+                            });
+                            // Retry sending the message
+                            chrome.tabs.sendMessage(
+                                tab.id,
+                                { action: 'extractAndAnalyzeJob', platform: platform.name },
+                                (retryResponse) => {
+                                    if (chrome.runtime.lastError) {
+                                        reject(new Error('Failed to communicate with content script after injection: ' + chrome.runtime.lastError.message));
+                                    } else if (!retryResponse || !retryResponse.success) {
+                                        reject(new Error(retryResponse?.error || 'Job extraction/analysis failed after injection.'));
+                                    } else {
+                                        resolve(retryResponse.analysis);
+                                    }
+                                }
+                            );
+                        } catch (injectErr) {
+                            reject(new Error('Failed to inject content script: ' + injectErr.message));
+                        }
                     } else {
-                        reject(new Error('Injected content script failed to initialize'));
+                        reject(new Error('Content script injection is not supported in this environment. Please reload the page or check your Chrome version.'));
                     }
-                });
-            });
-            
-            contentScriptReady = true;
-        } catch (injectionError) {
-            throw new Error(`Extension injection failed: ${injectionError.message}`);
-        }
-    }
-    
-    if (!contentScriptReady) {
-        throw new Error('Extension not ready. Please refresh the page and try again.');
-    }
-    
-    try {
-        updateLoadingStep('ai', 'active');
-        updateLoadingStatus('Analyzing for scams and red flags...');
-        
-        // Extract job data
-        const jobData = await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Data extraction timeout'));
-            }, 15000);
-            
-            chrome.tabs.sendMessage(tab.id, { action: 'extractJob' }, (response) => {
-                clearTimeout(timeout);
-                
-                if (chrome.runtime.lastError) {
-                    reject(new Error(`Communication error: ${chrome.runtime.lastError.message}`));
-                    return;
-                }
-                
-                if (response && response.error) {
-                    reject(new Error(`Extraction failed: ${response.error}`));
-                    return;
-                }
-                
-                if (!response) {
-                    reject(new Error('No response from page'));
-                    return;
-                }
-                
-                resolve(response);
-            });
-        });
-        
-        updateLoadingStep('verify', 'active');
-        updateLoadingStatus('Analyzing with AI...');
-        
-        // Send to background for analysis
-        const analysis = await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-                reject(new Error('Analysis timeout'));
-            }, 30000);
-            
-            chrome.runtime.sendMessage({
-                action: 'analyzeJob',
-                data: jobData
-            }, (response) => {
-                clearTimeout(timeout);
-                
-                if (chrome.runtime.lastError) {
-                    reject(new Error(`Extension error: ${chrome.runtime.lastError.message}`));
-                    return;
-                }
-                
-                if (!response) {
-                    reject(new Error('No analysis response'));
-                    return;
-                }
-                
-                if (response.success) {
-                    resolve(response.analysis);
+                } else if (!response || !response.success) {
+                    reject(new Error(response?.error || 'Job extraction/analysis failed.'));
                 } else {
-                    reject(new Error(response.error || 'Analysis failed'));
+                    resolve(response.analysis);
                 }
-            });
-        });
-        
-        return analysis;
-        
-    } catch (error) {
-        throw new Error(`Analysis error: ${error.message}`);
-    }
+            }
+        );
+    });
 }
 
 // Display analysis results
 function displayAnalysisResults(analysis) {
+    // Debug logging for diagnosis
+    console.log('[SpotGhost DEBUG] Raw analysis object:', analysis);
+    if (analysis && analysis.job) {
+        console.log('[SpotGhost DEBUG] Extracted job data:', analysis.job);
+    }
+    if (analysis && analysis.job && analysis.job.classicAnalysis) {
+        console.log('[SpotGhost DEBUG] Classic analysis result:', analysis.job.classicAnalysis);
+    }
     const classicAnalysis = analysis.job?.classicAnalysis || {};
     const aiAnalysis = analysis.job?.aiAnalysis || null;
     const safetyScore = classicAnalysis.safetyScore || 0;
@@ -438,14 +388,19 @@ function displayAnalysisResults(analysis) {
                 </div>
             `).join('');
         } else {
-            redFlagsList.innerHTML = '<div class="flag-item green"><div class="flag-icon">✅</div><div>No red flags detected</div></div>';
+            redFlagsList.innerHTML = `
+                <div class="flag-item green" style="justify-content:center;text-align:center;min-height:2.2em;">
+                    <div class="flag-icon" style="font-size:1.3em;">✅</div>
+                    <div style="font-weight:600;">No red flags detected</div>
+                </div>
+            `;
         }
     }
-    
+
     // Update green flags
     const greenFlags = classicAnalysis.greenFlags || classicAnalysis.positiveSignals || [];
-    const greenFlagsList = document.getElementById('green-flags-list');
     const greenFlagCountEl = document.getElementById('green-flag-count');
+    const greenFlagsList = document.getElementById('green-flags-list');
     if (greenFlagCountEl) greenFlagCountEl.textContent = greenFlags.length;
     if (greenFlagsList) {
         if (greenFlags.length > 0) {
@@ -456,10 +411,15 @@ function displayAnalysisResults(analysis) {
                 </div>
             `).join('');
         } else {
-            greenFlagsList.innerHTML = '<div class="flag-item"><div class="flag-icon">ℹ️</div><div>No specific positive indicators identified</div></div>';
+            greenFlagsList.innerHTML = `
+                <div class="flag-item" style="background:linear-gradient(90deg,#e0fdfa 0%,#e0f2fe 100%);color:#155e75;justify-content:center;text-align:center;min-height:2.2em;">
+                    <div class="flag-icon" style="font-size:1.3em;">ℹ️</div>
+                    <div style="font-weight:600;">No specific positive indicators identified</div>
+                </div>
+            `;
         }
     }
-    
+
     // Update recommendations
     const recommendations = aiAnalysis?.recommendations || classicAnalysis.recommendations?.actionItems || [];
     const recommendationsList = document.getElementById('recommendations-list');
@@ -538,6 +498,9 @@ function updateLoadingStep(stepId, status) {
         }
     }
 }
+
+// Helper to check for valid HTTP/HTTPS URLs
+
 
 // Action handlers
 async function saveCurrentJob() {

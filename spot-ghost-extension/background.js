@@ -25,9 +25,10 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   // Show welcome notification
   if (details.reason === 'install') {
     chrome.notifications.create({
-      type: 'basic',
-      title: 'SpotGhost Installed!',
-      message: 'Your job scam protection is now active. Visit any job site to get started.'
+  type: 'basic',
+  iconUrl: chrome.runtime.getURL('icon.svg'),
+  title: 'SpotGhost Installed!',
+  message: 'Your job scam protection is now active. Visit any job site to get started.'
     });
   }
   
@@ -91,34 +92,36 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
 });
 
-// Handle messages from content scripts and popup
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  switch (message.action) {
-    case 'analyzeJob':
-      handleJobAnalysis(message.data, sendResponse);
-      return true; // Keep message channel open for async response
-      
-    case 'getCachedAnalysis':
-      getCachedAnalysis(message.jobId, sendResponse);
-      return true;
-      
-    case 'reportScam':
-      handleScamReport(message.data, sendResponse);
-      return true;
-      
-    case 'getSettings':
-      getSettings(sendResponse);
-      return true;
-      
-    case 'updateSettings':
-      updateSettings(message.settings, sendResponse);
-      return true;
-      
-    case 'checkCompanyReputation':
-      checkCompanyReputation(message.company, sendResponse);
-      return true;
-  }
-});
+// Handle messages from content scripts and popup (guarded)
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    switch (message.action) {
+      case 'analyzeJob':
+        handleJobAnalysis(message.data, sendResponse);
+        return true; // Keep message channel open for async response
+        
+      case 'getCachedAnalysis':
+        getCachedAnalysis(message.jobId, sendResponse);
+        return true;
+        
+      case 'reportScam':
+        handleScamReport(message.data, sendResponse);
+        return true;
+        
+      case 'getSettings':
+        getSettings(sendResponse);
+        return true;
+        
+      case 'updateSettings':
+        updateSettings(message.settings, sendResponse);
+        return true;
+        
+      case 'checkCompanyReputation':
+        checkCompanyReputation(message.company, sendResponse);
+        return true;
+    }
+  });
+}
 
 // Check if URL is a supported job site
 function isJobSite(url) {
@@ -320,7 +323,15 @@ async function handleJobAnalysis(jobData, sendResponse) {
     
     const result = await response.json();
     console.log('✅ Analysis completed successfully');
-    
+    // Debug log for AI analysis
+    if (result && result.job) {
+      console.log('[SpotGhost DEBUG] Backend API response job object:', result.job);
+      if (result.job.aiAnalysis) {
+        console.log('[SpotGhost DEBUG] AI analysis result:', result.job.aiAnalysis);
+      } else {
+        console.log('[SpotGhost DEBUG] No AI analysis result present in backend response.');
+      }
+    }
     // Cache the result if we have a cache key
     if (cacheKey) {
       try {
@@ -330,17 +341,16 @@ async function handleJobAnalysis(jobData, sendResponse) {
         // Continue without caching
       }
     }
-    
     // Show notification if high risk
     const riskLevel = result.job?.classicAnalysis?.riskLevel;
     if (riskLevel === 'High' || riskLevel === 'Critical') {
       chrome.notifications.create({
         type: 'basic',
+        iconUrl: chrome.runtime.getURL('icon.svg'),
         title: '🚨 High Risk Job Detected',
         message: `This job has a ${riskLevel.toLowerCase()} risk level. Please review the analysis carefully.`
       });
     }
-    
     sendResponse({ success: true, analysis: result });
   } catch (error) {
     console.error('❌ Analysis error:', error);
@@ -423,9 +433,10 @@ async function handleScamReport(reportData, sendResponse) {
     
     if (response.ok) {
       chrome.notifications.create({
-        type: 'basic',
-        title: 'Report Submitted',
-        message: 'Thank you for helping protect the community!'
+  type: 'basic',
+  iconUrl: chrome.runtime.getURL('icon.svg'),
+  title: 'Report Submitted',
+  message: 'Thank you for helping protect the community!'
       });
       sendResponse({ success: true });
     } else {

@@ -1,3 +1,10 @@
+// Fallback: Extract field from description text
+function extractFieldFromDescription(description, fieldName) {
+  if (!description) return '';
+  const regex = new RegExp(fieldName + '[:\-\s]+([\w\s,]+)', 'i');
+  const match = description.match(regex);
+  return match ? match[1].trim() : '';
+}
 // Platform detection and extraction configuration
 const PLATFORMS = {
   linkedin: {
@@ -68,14 +75,30 @@ const PLATFORMS = {
         '.jobsearch-JobComponent-description'
       ],
       location: [
+        '.jobsearch-JobInfoHeader-subtitle > div', // Most reliable for city/state
         '[data-testid="job-location"]',
         '.jobsearch-JobInfoHeader-subtitle div',
-        '.jobsearch-JobMetadataHeader-item'
+        '.jobsearch-JobMetadataHeader-item',
+        '.jobsearch-JobInfoHeader-subtitle',
+        '.jobsearch-JobInfoHeader-subtitle *'
       ],
       salary: [
         '.jobsearch-JobMetadataHeader-item',
         '[data-testid="job-salary"]',
         '.salary-snippet'
+      ],
+      postedDate: [
+        '.jobsearch-JobMetadataFooter', // Often contains "Posted X days ago"
+        '[data-testid="job-detail-date"]',
+        '.jobsearch-JobInfoHeader-subtitle',
+        'time',
+        '[class*="date"]'
+      ],
+      applicationDeadline: [
+        '[data-testid*="deadline"]',
+        '[class*="deadline"]',
+        '.application-deadline',
+        '.jobsearch-JobMetadataFooter'
       ]
     }
   },
@@ -396,18 +419,40 @@ function extractJobData() {
     extractedAt: new Date().toISOString()
   };
   
-  // Extract core fields using platform-specific selectors
+  // Extract core fields using platform-specific selectors (restored logic)
   for (const [field, selectors] of Object.entries(platform.extractors)) {
     const extractedValue = extractTextFromSelectors(selectors);
     jobData[field] = extractedValue;
     console.log(`SpotGhost: Extracted ${field}:`, extractedValue ? extractedValue.substring(0, 100) + '...' : 'EMPTY');
   }
-  // Do NOT use fallback location extraction to avoid picking up irrelevant page locations
+  // Fallback: If location is still missing, use enhanced location extraction
   if (!jobData.location || jobData.location.length < 3) {
-    console.log('SpotGhost: Location extraction failed, leaving as empty.');
-    jobData.location = '';
+    const enhancedLoc = extractLocationWithFallbacks();
+    if (enhancedLoc && enhancedLoc !== 'Unknown Location') {
+      jobData.location = enhancedLoc;
+      console.log('SpotGhost: Enhanced fallback location:', jobData.location);
+    } else {
+      // Fallback to parsing description for location
+      const descLocation = extractFieldFromDescription(jobData.description, 'Location');
+      if (descLocation && descLocation.length > 2) {
+        jobData.location = descLocation;
+        console.log('SpotGhost: Fallback location extracted from description:', descLocation);
+      } else {
+        jobData.location = '';
+        console.log('SpotGhost: Location extraction failed, leaving as empty.');
+      }
+    }
   } else {
     console.log('SpotGhost: Primary location extraction successful:', jobData.location);
+  }
+
+  if (!jobData.postedDate || jobData.postedDate.length < 3) {
+    // Try to extract posted date from description as fallback
+    const descPosted = extractFieldFromDescription(jobData.description, 'Posted');
+    if (descPosted && descPosted.length > 2) {
+      jobData.postedDate = descPosted;
+      console.log('SpotGhost: Fallback posted date extracted from description:', descPosted);
+    }
   }
   
   // Extract additional fields with generic selectors
@@ -418,9 +463,49 @@ function extractJobData() {
   jobData.experienceLevel = extractExperienceLevel();
   jobData.postedDate = extractPostedDate();
   jobData.contactEmail = extractContactEmail();
-  
+
+  // Extract positive indicators (green flags)
+  jobData.positiveSignals = extractPositiveIndicators(jobData);
+
   // Clean and validate data
   return cleanJobData(jobData);
+// Extract positive indicators (green flags) from job data
+function extractPositiveIndicators(jobData) {
+  const greenFlags = [];
+  // 1. Company website or verified email
+  if (jobData.contactEmail && /@(?!gmail|yahoo|hotmail|outlook|protonmail|aol)\w+\./i.test(jobData.contactEmail)) {
+    greenFlags.push('Company email provided');
+  }
+  // 2. Benefits listed
+  if (jobData.benefits && jobData.benefits.length > 10) {
+    greenFlags.push('Benefits/perks listed');
+  }
+  // 3. Detailed requirements
+  if (jobData.requirements && jobData.requirements.length > 30) {
+    greenFlags.push('Detailed requirements specified');
+  }
+  // 4. Salary information present
+  if (jobData.salary && jobData.salary.length > 2) {
+    greenFlags.push('Salary information provided');
+  }
+  // 5. Company name is not generic
+  if (jobData.company && !/unknown|company|inc|llc|ltd|enterprise|corp/i.test(jobData.company) && jobData.company.length > 2) {
+    greenFlags.push('Company name appears specific');
+  }
+  // 6. Location is present and not generic
+  if (jobData.location && !/unknown|remote/i.test(jobData.location) && jobData.location.length > 2) {
+    greenFlags.push('Location specified');
+  }
+  // 7. Job description is detailed
+  if (jobData.description && jobData.description.length > 200) {
+    greenFlags.push('Detailed job description');
+  }
+  // 8. Application URL is present and not generic
+  if (jobData.applicationUrl && jobData.applicationUrl.length > 10 && !/linkedin\.com\/jobs\/?$/.test(jobData.applicationUrl)) {
+    greenFlags.push('Direct application link present');
+  }
+  return greenFlags;
+}
 }
 
 // Get the actual job URL, handling LinkedIn's complex URL structure
@@ -905,72 +990,183 @@ function initializeRealTimeFeatures() {
   console.log('SpotGhost Content: Real-time features initialized (all UI features disabled for side panel)');
 }
 
-// Quick risk scan for immediate feedback
-function performQuickRiskScan(jobData) {
-  const redFlags = [];
+// Classic analysis logic ported from backend (pure JS, safe for extension)
+function classicJobAnalysis(jobData, opts = {}) {
+  const warnings = [];
+  const greenFlags = [];
   let riskScore = 0;
-  
-  const fullText = `${jobData.title} ${jobData.company} ${jobData.description}`.toLowerCase();
-  
-  // Critical scam phrases
-  const criticalPhrases = [
-    'pay upfront fee', 'processing fee', 'training fee', 'activation fee',
-    'wire transfer', 'western union', 'cryptocurrency',
-    'work from home $500/day', 'make money fast', 'pyramid scheme'
+
+  // Normalize data
+  const description = (jobData.description || '').toLowerCase();
+  const title = (jobData.title || '').toLowerCase();
+  const company = (jobData.company || '').toLowerCase();
+  const fullText = `${description} ${title} ${company}`;
+
+  // 1. Critical scam indicators
+  const criticalScamPhrases = [
+    'quick money', 'easy money', 'fast cash', 'instant income',
+    'processing fee', 'training fee', 'startup fee', 'activation fee',
+    'money transfer', 'western union', 'wire transfer', 'cryptocurrency',
+    'pyramid scheme', 'mlm opportunity', 'multi-level marketing',
+    'make $500 per day', 'earn thousands weekly', 'financial freedom'
   ];
-  
-  criticalPhrases.forEach(phrase => {
-    if (fullText.includes(phrase)) {
-      redFlags.push(`Contains scam phrase: "${phrase}"`);
-      riskScore += 40;
-    }
-  });
-  
-  // Unrealistic salary promises
-  if (jobData.salary && /\$\d{3,}.*day/.test(jobData.salary)) {
-    redFlags.push('Unrealistic daily salary promise');
-    riskScore += 30;
-  }
-  
-  // Generic company names
-  const genericCompanyWords = ['corp', 'inc', 'llc', 'ltd', 'company', 'enterprise'];
-  if (genericCompanyWords.every(word => jobData.company.toLowerCase().includes(word))) {
-    redFlags.push('Very generic company name');
-    riskScore += 20;
-  }
-  
-  // Improved: Do not flag location contradiction if location was overridden to 'India (Onboarding), Remote' or 'Remote'
-  const location = (jobData.location || '').toLowerCase();
-  if (!location || location === 'unknown location') {
-    redFlags.push('No location specified');
-    riskScore += 15;
-  }
-  // Do not flag contradiction if location is 'india (onboarding), remote' or 'remote'
-  else if (
-    location !== 'india (onboarding), remote' &&
-    location !== 'remote' &&
-    location !== 'remote, india (onboarding)'
-  ) {
-    // (If you want to keep the contradiction logic, add it here, but skip for these cases)
+  const foundCriticalPhrases = criticalScamPhrases.filter(phrase => fullText.includes(phrase));
+  if (foundCriticalPhrases.length > 0) {
+    warnings.push(`🚨 Contains common scam phrases: ${foundCriticalPhrases.slice(0, 2).join(', ')}`);
+    riskScore += foundCriticalPhrases.length * 40;
+  } else {
+    greenFlags.push('No common scam phrases detected.');
   }
 
-  if (!jobData.requirements && !jobData.qualifications) {
-    redFlags.push('No job requirements specified');
+  // 2. High-pressure tactics
+  const highPressurePhrases = [
+    'urgent hiring', 'immediate start', 'no interview required',
+    'cash only', 'pay in advance', 'act now', 'limited time'
+  ];
+  const foundHighPressure = highPressurePhrases.filter(phrase => fullText.includes(phrase));
+  if (foundHighPressure.length > 0) {
+    warnings.push(`⚠️ Uses high-pressure language: ${foundHighPressure.slice(0, 2).join(', ')}`);
+    riskScore += foundHighPressure.length * 25;
+  } else {
+    greenFlags.push('No high-pressure or urgent language detected.');
+  }
+
+  // 3. Email analysis
+  if (jobData.contactEmail) {
+    const email = jobData.contactEmail.toLowerCase();
+    const domain = email.split('@')[1];
+    const freeEmailDomains = [
+      'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'aol.com'
+    ];
+    if (freeEmailDomains.includes(domain) && company.includes('corp')) {
+      warnings.push('⚠️ Large company using personal email instead of business email');
+      riskScore += 30;
+    } else if (!freeEmailDomains.includes(domain)) {
+      greenFlags.push('Contact email uses a business domain.');
+    }
+  }
+
+  // 4. Website/Application URL analysis
+  if (jobData.applicationUrl) {
+    const url = jobData.applicationUrl.toLowerCase();
+    const majorJobPlatforms = [
+      'linkedin.com', 'indeed.com', 'glassdoor.com', 'monster.com', 
+      'ziprecruiter.com', 'careerbuilder.com', 'jobs.google.com'
+    ];
+    const isOnMajorPlatform = majorJobPlatforms.some(platform => url.includes(platform));
+    if (isOnMajorPlatform) {
+      greenFlags.push('Job posted on reputable job platform.');
+      if (url.includes('linkedin.com')) {
+        greenFlags.push('LinkedIn requires company verification for job postings.');
+      } else if (url.includes('indeed.com')) {
+        greenFlags.push('Indeed has fraud prevention measures in place.');
+      } else if (url.includes('glassdoor.com')) {
+        greenFlags.push('Glassdoor requires employer verification for job posts.');
+      }
+    } else {
+      if (url.includes('blogspot') || url.includes('wordpress.com') || url.includes('wix')) {
+        warnings.push('⚠️ Job posted on free website platform');
+        riskScore += 35;
+      } else {
+        greenFlags.push('Job not posted on a free website platform.');
+      }
+      if (url.includes('bit.ly') || url.includes('tinyurl') || url.includes('t.co')) {
+        warnings.push('🚨 Uses shortened/hidden web address - major red flag');
+        riskScore += 50;
+      } else {
+        greenFlags.push('No shortened or hidden web address detected.');
+      }
+      if (url.startsWith('http://')) {
+        warnings.push('⚠️ Website is not secure (no HTTPS)');
+        riskScore += 20;
+      } else if (url.startsWith('https://')) {
+        greenFlags.push('Website uses secure HTTPS connection.');
+      }
+    }
+  } else {
+    warnings.push('⚠️ No application URL provided');
     riskScore += 15;
   }
-  
-  // Determine risk level
-  let riskLevel = 'Very Low';
-  if (riskScore >= 60) riskLevel = 'Critical';
-  else if (riskScore >= 40) riskLevel = 'High';
-  else if (riskScore >= 25) riskLevel = 'Medium';
-  else if (riskScore >= 15) riskLevel = 'Low';
-  
+
+  // 5. Compensation red flags
+  if (jobData.salary) {
+    const salary = jobData.salary.toLowerCase();
+    if (salary.includes('unlimited') || salary.includes('no limit')) {
+      warnings.push('🚨 Promises unlimited earnings - classic scam tactic');
+      riskScore += 50;
+    }
+    const salaryNumbers = salary.match(/\d+/g);
+    if (salaryNumbers) {
+      const maxNumber = Math.max(...salaryNumbers.map(Number));
+      if (salary.includes('day') && maxNumber > 300) {
+        warnings.push('⚠️ Daily salary seems unrealistic');
+        riskScore += 35;
+      }
+      if (salary.includes('hour') && maxNumber > 100) {
+        warnings.push('⚠️ Hourly wage seems unusually high');
+        riskScore += 30;
+      }
+    } else {
+      greenFlags.push('Salary/compensation appears realistic.');
+    }
+  }
+
+  // 6. Missing critical information
+  const missingInfo = [];
+  if (!jobData.company || jobData.company.length < 2 || jobData.company === 'Unknown Company') {
+    missingInfo.push('company name');
+  }
+  if (!jobData.description || jobData.description.length < 50) {
+    missingInfo.push('job description');
+  }
+  if (!jobData.title || jobData.title.length < 3 || jobData.title === 'Unknown Job') {
+    missingInfo.push('job title');
+  }
+  if (!jobData.location || jobData.location === 'Unknown Location' || jobData.location.length < 3) {
+    missingInfo.push('location');
+  }
+  const hasValidApplicationUrl = jobData.applicationUrl && 
+    (jobData.applicationUrl.startsWith('http') || jobData.applicationUrl.includes('.com'));
+  if (!hasValidApplicationUrl) {
+    missingInfo.push('application link');
+  }
+  if (missingInfo.length >= 1) {
+    if (!opts.skipMissingPenalty) {
+      warnings.push(`Missing key information: ${missingInfo.join(', ')}`);
+      riskScore += missingInfo.length * 20;
+    }
+  } else {
+    greenFlags.push('All essential job information is present.');
+  }
+
+  // 7. Generic content check
+  const genericPhrases = [
+    'competitive salary', 'dynamic environment', 'team player',
+    'excellent communication skills', 'fast-paced environment'
+  ];
+  const foundGeneric = genericPhrases.filter(phrase => description.includes(phrase));
+  if (foundGeneric.length > 4) {
+    warnings.push('Job description is very generic');
+    riskScore += 20;
+  } else {
+    greenFlags.push('Job description is specific and detailed.');
+  }
+
+  riskScore = Math.min(100, riskScore);
+  const safetyScore = Math.max(0, 100 - riskScore);
+  let riskLevel;
+  if (safetyScore >= 85) riskLevel = 'Very Low';
+  else if (safetyScore >= 70) riskLevel = 'Low'; 
+  else if (safetyScore >= 55) riskLevel = 'Medium';
+  else if (safetyScore >= 40) riskLevel = 'High';
+  else riskLevel = 'Critical';
+
   return {
-    riskLevel,
+    safetyScore,
     riskScore,
-    redFlags,
-    safetyScore: Math.max(0, 100 - riskScore)
+    riskLevel,
+    warnings,
+    greenFlags
   };
 }
 
@@ -984,27 +1180,36 @@ function showQuickWarning(scanResult) {
 async function analyzeCurrentJob() {
   try {
     const jobData = extractJobData();
-    
+    // Run classic analysis locally for instant feedback
+    const classicAnalysis = classicJobAnalysis(jobData);
     // Show loading state
     showAnalysisLoading();
-    
-    // Send to background script for full analysis
+    // Send to background script for full AI analysis
     chrome.runtime.sendMessage({
       action: 'analyzeJob',
       data: jobData
     }, (response) => {
       hideAnalysisLoading();
-      
       if (response && response.success) {
-        // Results will be shown in side panel - no need for modal popup
+        // Merge classic analysis with backend results for display
+        const merged = {
+          ...response.analysis,
+          job: {
+            ...response.analysis.job,
+            classicAnalysis
+          }
+        };
+        showAnalysisResults(merged);
         console.log('SpotGhost: Analysis complete, results shown in side panel');
       } else {
+        // If backend fails, still show local classic analysis
+        showAnalysisResults({ job: { ...jobData, classicAnalysis } });
         showAnalysisError(response?.error || 'Analysis failed');
       }
     });
-    
   } catch (error) {
     hideAnalysisLoading();
+    // If extraction or classic analysis fails, show error
     showAnalysisError(error.message);
   }
 }
@@ -1061,26 +1266,59 @@ function showAnalysisError(error) {
   alert(`SpotGhost Analysis Error: ${error}`);
 }
 
-// Message listener for popup communication
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  try {
-    if (message.action === 'ping') {
-      sendResponse({ status: 'ready', platform: detectPlatform()?.name || 'unknown' });
-      return true;
+// Message listener for popup/sidepanel communication (guarded)
+if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    try {
+      if (message.action === 'ping') {
+        sendResponse({ status: 'ready', platform: detectPlatform()?.name || 'unknown' });
+        return true;
+      }
+
+      if (message.action === 'extractJob') {
+        const jobData = extractJobData();
+        console.log('SpotGhost Content: Job data extracted:', jobData);
+        sendResponse(jobData);
+        return true;
+      }
+      if (message.action === 'extractAndAnalyzeJob') {
+        try {
+          const jobData = extractJobData();
+          // Always run and attach classic analysis
+          let classicAnalysis = null;
+          if (typeof performClassicAnalysis === 'function') {
+            classicAnalysis = performClassicAnalysis(jobData);
+          } else if (typeof performQuickRiskScan === 'function') {
+            classicAnalysis = performQuickRiskScan(jobData);
+          } else if (typeof classicJobAnalysis === 'function') {
+            classicAnalysis = classicJobAnalysis(jobData);
+          }
+          jobData.classicAnalysis = classicAnalysis;
+          // Run AI analysis if available (OG function)
+          let aiAnalysis = null;
+          if (typeof performAIAnalysis === 'function') {
+            aiAnalysis = performAIAnalysis(jobData);
+          }
+          const analysis = {
+            job: {
+              ...jobData,
+              aiAnalysis,
+              platform: message.platform || jobData.platform || null
+            }
+          };
+          sendResponse({ success: true, analysis });
+        } catch (err) {
+          sendResponse({ success: false, error: err.message });
+        }
+        return true;
+      }
+    } catch (error) {
+      console.error('SpotGhost Content: Message handling error:', error);
+      sendResponse({ error: error.message });
     }
-    
-    if (message.action === 'extractJob') {
-      const jobData = extractJobData();
-      console.log('SpotGhost Content: Job data extracted:', jobData);
-      sendResponse(jobData);
-      return true;
-    }
-  } catch (error) {
-    console.error('SpotGhost Content: Message handling error:', error);
-    sendResponse({ error: error.message });
-  }
-  return true;
-});
+    return true;
+  });
+}
 
 // Initialize when page loads
 console.log('SpotGhost Content: Script loaded, document state:', document.readyState);
