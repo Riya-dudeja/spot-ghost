@@ -1,6 +1,10 @@
 
 # SpotGhost
 
+# SpotGhost
+
+Live Demo: [spot-ghost-jobs.vercel.app](https://spot-ghost-jobs.vercel.app)
+
 SpotGhost is a full-stack web application and Chrome extension designed to help users detect and avoid job scams on popular job sites like LinkedIn, Indeed, Glassdoor, and more. It combines instant classic analysis and AI-powered risk assessment for job postings, with results displayed in both the web dashboard and browser extension.
 
 ## Features
