@@ -1,5 +1,10 @@
+// SpotGhost Side Panel - Clean Implementation
 
-// Helper to check for valid HTTP/HTTPS URLs
+// State management
+let currentState = 'welcome';
+let currentAnalysis = null;
+
+// Helper functions
 function isValidHttpUrl(url) {
     try {
         const u = new URL(url);
@@ -9,43 +14,24 @@ function isValidHttpUrl(url) {
     }
 }
 
-// State management
-let currentState = 'welcome'; // welcome, loading, results, error, permissions
-let currentAnalysis = null;
-
 // Initialize side panel
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('SpotGhost Side Panel: Initializing...');
-    
     setupEventListeners();
     await checkCurrentPage();
-    
     console.log('SpotGhost Side Panel: Ready');
 });
 
 // Setup event listeners
 function setupEventListeners() {
-    // Main analyze button
     document.getElementById('analyze-btn').addEventListener('click', startAnalysis);
-    
-    // Analyze another button
-    document.getElementById('analyze-another-btn').addEventListener('click', () => {
-        showState('welcome');
-    });
-    
-    // Retry button
+    document.getElementById('analyze-another-btn').addEventListener('click', () => showState('welcome'));
     document.getElementById('retry-btn').addEventListener('click', startAnalysis);
-    
-    // Permission buttons
     document.getElementById('grant-permission-btn').addEventListener('click', handlePermissionGrant);
     document.getElementById('deny-permission-btn').addEventListener('click', handlePermissionDeny);
-    
-    // Action buttons
     document.getElementById('save-job-btn').addEventListener('click', saveCurrentJob);
     document.getElementById('report-scam-btn').addEventListener('click', reportScam);
     document.getElementById('view-full-report-btn').addEventListener('click', viewFullReport);
-    
-    // Footer links
     document.getElementById('settings-link').addEventListener('click', openSettings);
 }
 
@@ -59,23 +45,16 @@ async function checkCurrentPage() {
             return;
         }
         
-        console.log('SpotGhost: Current tab URL:', tab.url);
-        console.log('SpotGhost: Tab URL length:', tab.url.length);
-        console.log('SpotGhost: Tab URL includes linkedin.com:', tab.url.toLowerCase().includes('linkedin.com'));
-        
-        // Update current page info
         updateCurrentPageInfo(tab.url);
         
-        // Platform detection and display removed
-        // Only update current page info and permissions
         const hasPermission = await checkSitePermissions(tab.url);
         if (!hasPermission) {
             showState('permissions');
             updateStatus('Permission required', 'warning');
             return;
         }
+        
         document.getElementById('analyze-btn').disabled = false;
-        document.getElementById('analyze-btn').innerHTML = '<span class="btn-icon">🔍</span><span class="btn-text">Analyze This Job</span>';
         showState('welcome');
         
     } catch (error) {
@@ -88,63 +67,40 @@ async function checkCurrentPage() {
 function updateCurrentPageInfo(url) {
     try {
         const urlObj = new URL(url);
-        const displayUrl = `${urlObj.hostname}${urlObj.pathname}`;
-        document.getElementById('current-url').textContent = displayUrl.length > 50 ? 
-            displayUrl.substring(0, 47) + '...' : displayUrl;
+        const displayUrl = urlObj.hostname + urlObj.pathname;
+        const urlEl = document.getElementById('current-url');
+        if (urlEl) {
+            urlEl.textContent = displayUrl.length > 50 ? displayUrl.substring(0, 47) + '...' : displayUrl;
+        }
     } catch (error) {
-        document.getElementById('current-url').textContent = 'Invalid URL';
+        const urlEl = document.getElementById('current-url');
+        if (urlEl) urlEl.textContent = 'Invalid URL';
     }
 }
 
 // Detect platform from URL
 function detectPlatform(url) {
-    // Force LinkedIn detection for debugging
-    if (url.toLowerCase().includes('linkedin.com')) {
-        console.log('SpotGhost: FORCED LinkedIn detection');
-        return { name: 'LinkedIn' };
-    }
-    
     const platforms = {
         linkedin: { name: 'LinkedIn', patterns: ['linkedin.com'] },
         indeed: { name: 'Indeed', patterns: ['indeed.com'] },
-        glassdoor: { name: 'Glassdoor', patterns: ['glassdoor.com'] },
-        monster: { name: 'Monster', patterns: ['monster.com'] },
-        ziprecruiter: { name: 'ZipRecruiter', patterns: ['ziprecruiter.com'] },
-        google: { name: 'Google Jobs', patterns: ['jobs.google.com'] },
-        careerbuilder: { name: 'CareerBuilder', patterns: ['careerbuilder.com'] },
-        dice: { name: 'Dice', patterns: ['dice.com'] },
-        uplers: { name: 'Uplers', patterns: ['uplers.com'] },
-        naukri: { name: 'Naukri', patterns: ['naukri.com'] },
-        angellist: { name: 'AngelList', patterns: ['angel.co', 'wellfound.com'] },
-        stackoverflow: { name: 'Stack Overflow Jobs', patterns: ['stackoverflow.com/jobs'] }
+        glassdoor: { name: 'Glassdoor', patterns: ['glassdoor.com'] }
     };
     
     const urlLower = url.toLowerCase();
-    console.log('SpotGhost: Detecting platform for URL:', urlLower);
-    console.log('SpotGhost: Full URL object:', url);
     
-    // Check for known platforms first
     for (const [key, platform] of Object.entries(platforms)) {
         for (const pattern of platform.patterns) {
-            console.log(`SpotGhost: Checking pattern "${pattern}" against URL`);
             if (urlLower.includes(pattern)) {
-                console.log(`SpotGhost: ✅ MATCH! Detected platform - ${platform.name} (${key})`);
                 return platform;
             }
         }
     }
     
-    // If no specific platform detected, check if it's likely a job posting
-    const jobIndicators = [
-        'job', 'career', 'hiring', 'position', 'vacancy', 'opportunity',
-        'apply', 'employment', 'work', 'recruit', 'openings'
-    ];
-    
+    // Generic job site detection
+    const jobIndicators = ['job', 'career', 'hiring', 'position', 'vacancy'];
     const hasJobIndicators = jobIndicators.some(indicator => urlLower.includes(indicator));
     
     if (hasJobIndicators) {
-        console.log('SpotGhost: Detected generic job posting site');
-        // Extract domain name for platform name
         try {
             const domain = new URL(url).hostname.replace('www.', '');
             const companyName = domain.split('.')[0];
@@ -157,7 +113,6 @@ function detectPlatform(url) {
         }
     }
     
-    console.log('SpotGhost: No platform detected');
     return null;
 }
 
@@ -165,12 +120,10 @@ function detectPlatform(url) {
 async function checkSitePermissions(url) {
     try {
         const hostname = new URL(url).hostname;
-        const hasPermission = await chrome.permissions.contains({
-            origins: [`https://${hostname}/*`]
+        return await chrome.permissions.contains({
+            origins: [hostname.includes('https:') ? url : 'https://' + hostname + '/*']
         });
-        return hasPermission;
     } catch (error) {
-        console.warn('Permission check failed:', error);
         return false;
     }
 }
@@ -183,27 +136,10 @@ async function handlePermissionGrant() {
             showError('No active tab or URL found');
             return;
         }
-        let hostname;
-        try {
-            hostname = new URL(tab.url).hostname;
-        } catch (e) {
-            showError('Invalid tab URL');
-            return;
-        }
-
-        // Check if the permission can be requested (must be in manifest)
-        const manifest = chrome.runtime.getManifest();
-        const hostPermissions = manifest.host_permissions || [];
-        const canRequest = hostPermissions.some(pattern =>
-            pattern === '<all_urls>' || (pattern.includes('*') ? hostname.endsWith(pattern.replace(/^[*.]+/, '')) : hostname === pattern)
-        );
-        if (!canRequest) {
-            showError('Cannot request permission for this site. Please check extension settings.');
-            return;
-        }
-
+        
+        const hostname = new URL(tab.url).hostname;
         const granted = await chrome.permissions.request({
-            origins: [`https://${hostname}/*`]
+            origins: ['https://' + hostname + '/*']
         });
 
         if (granted) {
@@ -226,42 +162,50 @@ function handlePermissionDeny() {
 // Start job analysis
 async function startAnalysis() {
     try {
-        // DEV: Always clear cached analysis before running new analysis
+        // Clear cached analysis before running new analysis
         if (chrome && chrome.storage && chrome.storage.local) {
             await new Promise(resolve => chrome.storage.local.clear(resolve));
             console.log('SpotGhost: Cleared local cache before analysis');
         }
+        
         showState('loading');
         updateStatus('Analyzing job...', 'loading');
         updateLoadingStep('extract', 'active');
+        
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (!tab || !isValidHttpUrl(tab.url)) {
             showError('No valid tab URL found. Please open a job posting page.');
             updateStatus('Analysis failed', 'error');
             return;
         }
+        
         const platform = detectPlatform(tab.url);
         if (!platform) {
             showError('Please navigate to a job posting page');
             updateStatus('Analysis failed', 'error');
             return;
         }
+        
         // Check permissions
         const hasPermission = await checkSitePermissions(tab.url);
         if (!hasPermission) {
             showState('permissions');
             return;
         }
+        
         updateLoadingStatus('Extracting job information...');
         const analysis = await performJobAnalysis(tab, platform);
+        
         updateLoadingStep('extract', 'completed');
         updateLoadingStep('ai', 'completed');
         updateLoadingStep('verify', 'completed');
         updateLoadingStep('complete', 'completed');
+        
         currentAnalysis = analysis;
         displayAnalysisResults(analysis);
         showState('results');
         updateStatus('Analysis complete', 'ready');
+        
     } catch (error) {
         console.error('Analysis failed:', error);
         showError(error.message);
@@ -269,45 +213,139 @@ async function startAnalysis() {
     }
 }
 
-// Send a message to the content script to extract job data and perform analysis
+// Perform job analysis
 async function performJobAnalysis(tab, platform) {
-    return new Promise((resolve, reject) => {
+    console.log('SpotGhost: Starting job analysis for platform:', platform.name);
+    
+    if (!chrome.scripting) {
+        throw new Error('Chrome scripting API not available. Please update your Chrome browser.');
+    }
+    
+    return new Promise(async (resolve, reject) => {
+        // First try to send message directly
         chrome.tabs.sendMessage(
             tab.id,
             { action: 'extractAndAnalyzeJob', platform: platform.name },
             async (response) => {
                 if (chrome.runtime.lastError) {
-                    // Fallback: Try to inject content script, then retry
-                    if (chrome.scripting && chrome.scripting.executeScript) {
-                        try {
-                            await chrome.scripting.executeScript({
-                                target: { tabId: tab.id },
-                                files: ['content.js']
-                            });
-                            // Retry sending the message
-                            chrome.tabs.sendMessage(
-                                tab.id,
-                                { action: 'extractAndAnalyzeJob', platform: platform.name },
-                                (retryResponse) => {
-                                    if (chrome.runtime.lastError) {
-                                        reject(new Error('Failed to communicate with content script after injection: ' + chrome.runtime.lastError.message));
-                                    } else if (!retryResponse || !retryResponse.success) {
-                                        reject(new Error(retryResponse?.error || 'Job extraction/analysis failed after injection.'));
+                    // Content script not loaded, inject it first
+                    try {
+                        console.log('SpotGhost: Content script not found, injecting scripts...');
+                        
+                        // Check if tab is valid for script injection
+                        if (!tab.url || tab.url.startsWith('chrome://') || tab.url.startsWith('moz-extension://')) {
+                            reject(new Error('Cannot inject scripts into this page type. Please navigate to a regular website.'));
+                            return;
+                        }
+                        
+                        // Inject ML model first, then content script
+                        console.log('SpotGhost: Injecting ML model...');
+                        await chrome.scripting.executeScript({
+                            target: { tabId: tab.id },
+                            files: ['ml-model.js']
+                        });
+                        
+                        console.log('SpotGhost: Injecting content script...');
+                        await chrome.scripting.executeScript({
+                            target: { tabId: tab.id },
+                            files: ['content.js']
+                        });
+                        
+                        console.log('SpotGhost: Scripts injected successfully, waiting for initialization...');
+                        
+                        // Wait for initialization
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        
+                        // Retry sending the message
+                        console.log('SpotGhost: Retrying message after injection...');
+                        chrome.tabs.sendMessage(
+                            tab.id,
+                            { action: 'extractAndAnalyzeJob', platform: platform.name },
+                            (retryResponse) => {
+                                if (chrome.runtime.lastError) {
+                                    console.error('SpotGhost: Retry failed:', chrome.runtime.lastError);
+                                    reject(new Error('Failed to communicate with content script after injection: ' + chrome.runtime.lastError.message));
+                                } else if (!retryResponse || !retryResponse.success) {
+                                    console.error('SpotGhost: Retry response failed:', retryResponse);
+                                    reject(new Error(retryResponse?.error || 'Job extraction/analysis failed after injection.'));
+                                } else {
+                                    console.log('SpotGhost: Analysis successful after injection');
+                                    console.log('[SpotGhost DEBUG] Local analysis received, now getting AI analysis from backend...');
+                                    
+                                    // We have local analysis, now get AI analysis from backend
+                                    if (retryResponse.analysis && retryResponse.analysis.job) {
+                                        const jobData = retryResponse.analysis.job;
+                                        
+                                        // Send to background script for AI analysis
+                                        chrome.runtime.sendMessage({
+                                            action: 'analyzeJob',
+                                            data: jobData
+                                        }, (aiResponse) => {
+                                            if (aiResponse && aiResponse.success) {
+                                                console.log('[SpotGhost DEBUG] AI analysis received from backend');
+                                                // Merge local analysis with AI analysis
+                                                const mergedAnalysis = {
+                                                    ...retryResponse.analysis,
+                                                    job: {
+                                                        ...retryResponse.analysis.job,
+                                                        aiAnalysis: aiResponse.analysis.job?.aiAnalysis || null
+                                                    }
+                                                };
+                                                resolve(mergedAnalysis);
+                                            } else {
+                                                console.warn('[SpotGhost DEBUG] AI analysis failed, using local analysis only');
+                                                resolve(retryResponse.analysis);
+                                            }
+                                        });
                                     } else {
                                         resolve(retryResponse.analysis);
                                     }
                                 }
-                            );
-                        } catch (injectErr) {
-                            reject(new Error('Failed to inject content script: ' + injectErr.message));
+                            }
+                        );
+                    } catch (injectErr) {
+                        console.error('SpotGhost: Script injection failed:', injectErr);
+                        if (injectErr.message && injectErr.message.includes('Cannot access')) {
+                            reject(new Error('Cannot access this page. Please reload the page and try again, or check if the site allows extensions.'));
+                        } else {
+                            reject(new Error('Script injection failed: ' + injectErr.message));
                         }
-                    } else {
-                        reject(new Error('Content script injection is not supported in this environment. Please reload the page or check your Chrome version.'));
                     }
                 } else if (!response || !response.success) {
+                    console.error('SpotGhost: Direct message failed:', response);
                     reject(new Error(response?.error || 'Job extraction/analysis failed.'));
                 } else {
-                    resolve(response.analysis);
+                    console.log('SpotGhost: Analysis successful via direct message');
+                    console.log('[SpotGhost DEBUG] Local analysis received, now getting AI analysis from backend...');
+                    
+                    // We have local analysis, now get AI analysis from backend
+                    if (response.analysis && response.analysis.job) {
+                        const jobData = response.analysis.job;
+                        
+                        // Send to background script for AI analysis
+                        chrome.runtime.sendMessage({
+                            action: 'analyzeJob',
+                            data: jobData
+                        }, (aiResponse) => {
+                            if (aiResponse && aiResponse.success) {
+                                console.log('[SpotGhost DEBUG] AI analysis received from backend');
+                                // Merge local analysis with AI analysis
+                                const mergedAnalysis = {
+                                    ...response.analysis,
+                                    job: {
+                                        ...response.analysis.job,
+                                        aiAnalysis: aiResponse.analysis.job?.aiAnalysis || null
+                                    }
+                                };
+                                resolve(mergedAnalysis);
+                            } else {
+                                console.warn('[SpotGhost DEBUG] AI analysis failed, using local analysis only');
+                                resolve(response.analysis);
+                            }
+                        });
+                    } else {
+                        resolve(response.analysis);
+                    }
                 }
             }
         );
@@ -316,143 +354,341 @@ async function performJobAnalysis(tab, platform) {
 
 // Display analysis results
 function displayAnalysisResults(analysis) {
-    // Debug logging for diagnosis
-    console.log('[SpotGhost DEBUG] Raw analysis object:', analysis);
+    console.log('[SpotGhost DEBUG] === DISPLAYING ANALYSIS RESULTS ===');
+    console.log('[SpotGhost DEBUG] Raw analysis parameter:', analysis);
     if (analysis && analysis.job) {
-        console.log('[SpotGhost DEBUG] Extracted job data:', analysis.job);
+        console.log('[SpotGhost DEBUG] Analysis.job exists:', analysis.job);
+        console.log('[SpotGhost DEBUG] Analysis.job keys:', Object.keys(analysis.job));
+        console.log('[SpotGhost DEBUG] Analysis.job.aiAnalysis value:', analysis.job.aiAnalysis);
+        console.log('[SpotGhost DEBUG] Analysis.job.aiAnalysis type:', typeof analysis.job.aiAnalysis);
+    } else {
+        console.log('[SpotGhost DEBUG] No analysis.job found');
+        if (analysis) {
+            console.log('[SpotGhost DEBUG] Analysis keys:', Object.keys(analysis));
+        }
     }
-    if (analysis && analysis.job && analysis.job.classicAnalysis) {
-        console.log('[SpotGhost DEBUG] Classic analysis result:', analysis.job.classicAnalysis);
-    }
+    console.log('[SpotGhost DEBUG] === END ANALYSIS DEBUG ===');
+    
+    console.log('[SpotGhost DEBUG] Displaying analysis results:', analysis);
+    console.log('[SpotGhost DEBUG] ML Analysis present:', !!analysis.job?.mlAnalysis);
+    console.log('[SpotGhost DEBUG] Classic Analysis present:', !!analysis.job?.classicAnalysis);
+    
     const classicAnalysis = analysis.job?.classicAnalysis || {};
     const aiAnalysis = analysis.job?.aiAnalysis || null;
-    const safetyScore = classicAnalysis.safetyScore || 0;
-    const riskLevel = classicAnalysis.riskLevel || 'Unknown';
+    const mlAnalysis = analysis.job?.mlAnalysis || null;
+    
+    // Log ML analysis details
+    if (mlAnalysis) {
+        console.log('[SpotGhost DEBUG] ML Analysis details:', {
+            scamProbability: mlAnalysis.scamProbability,
+            confidence: mlAnalysis.confidence,
+            features: mlAnalysis.features
+        });
+    } else {
+        console.log('[SpotGhost DEBUG] No ML analysis found');
+    }
     
     // Update job header
     const jobTitleEl = document.getElementById('job-title');
-    if (jobTitleEl) jobTitleEl.textContent = analysis.job?.title || 'Unknown Job';
     const jobCompanyEl = document.getElementById('job-company');
-    if (jobCompanyEl) jobCompanyEl.textContent = analysis.job?.company || 'Unknown Company';
-    // Location and platform display removed
     
-    // Update safety score
-    const scoreCircle = document.getElementById('score-circle');
-    const scoreAngle = (safetyScore / 100) * 360;
-    if (scoreCircle) scoreCircle.style.setProperty('--score-angle', `${scoreAngle}deg`);
-    const scoreNumberEl = document.getElementById('score-number');
-    if (scoreNumberEl) scoreNumberEl.textContent = safetyScore;
-    const riskLevelEl = document.getElementById('risk-level');
-    if (riskLevelEl) {
-        riskLevelEl.textContent = riskLevel;
-        riskLevelEl.className = `risk-level ${riskLevel.toLowerCase().replace(' ', '-')}`;
+    if (jobTitleEl) jobTitleEl.textContent = analysis.job?.title || 'Job Title Not Found';
+    if (jobCompanyEl) jobCompanyEl.textContent = analysis.job?.company || 'Company Not Found';
+    
+    // Calculate combined safety score and risk assessment
+    let safetyScore = 50; // Default neutral score
+    let riskLevel = 'Medium Risk';
+    let analysisMethod = 'Rule-based Analysis';
+    let confidence = 0;
+    let recommendation = 'Proceed with caution and verify company details.';
+    
+    // Prioritize ML analysis if available AND has good confidence
+    if (mlAnalysis && mlAnalysis.confidence > 0.7) {
+        console.log('[SpotGhost DEBUG] Using ML analysis results');
+        
+        // Convert ML scam probability to safety score (inverse relationship)
+        safetyScore = Math.round((1 - mlAnalysis.scamProbability) * 100);
+        confidence = mlAnalysis.confidence;
+        analysisMethod = `AI Machine Learning (${Math.round(confidence * 100)}% confidence)`;
+        
+        // Determine risk level based on ML prediction
+        if (mlAnalysis.scamProbability < 0.15) {
+            riskLevel = 'Very Low Risk';
+            recommendation = 'This appears to be a legitimate job posting. Proceed with confidence.';
+        } else if (mlAnalysis.scamProbability < 0.35) {
+            riskLevel = 'Low Risk';
+            recommendation = 'Generally appears legitimate. Apply normal due diligence.';
+        } else if (mlAnalysis.scamProbability < 0.65) {
+            riskLevel = 'Medium Risk';
+            recommendation = 'Exercise caution. Verify company details and avoid sharing personal information.';
+        } else if (mlAnalysis.scamProbability < 0.85) {
+            riskLevel = 'High Risk';
+            recommendation = 'Multiple red flags detected. Research thoroughly before proceeding.';
+        } else {
+            riskLevel = 'Very High Risk';
+            recommendation = 'Strong indicators of a scam. We recommend avoiding this opportunity.';
+        }
+    } else if (classicAnalysis.safetyScore !== undefined) {
+        console.log('[SpotGhost DEBUG] Using classic analysis results');
+        
+        safetyScore = classicAnalysis.safetyScore;
+        riskLevel = classicAnalysis.riskLevel || 'Medium Risk';
+        analysisMethod = 'Rule-based Analysis';
+        
+        // Generate recommendations based on classic analysis
+        if (safetyScore >= 80) {
+            recommendation = 'This appears to be a legitimate job posting. Proceed with confidence.';
+        } else if (safetyScore >= 60) {
+            recommendation = 'Generally appears legitimate. Apply normal due diligence.';
+        } else if (safetyScore >= 40) {
+            recommendation = 'Exercise caution. Verify company details and avoid sharing personal information.';
+        } else {
+            recommendation = 'Multiple red flags detected. We recommend avoiding this opportunity.';
+        }
     }
     
-    // Update score description
-    let scoreDescription = 'Analysis complete.';
-    if (safetyScore >= 80) scoreDescription = 'This job posting appears very safe and legitimate.';
-    else if (safetyScore >= 65) scoreDescription = 'This job posting appears mostly safe with minor concerns.';
-    else if (safetyScore >= 50) scoreDescription = 'This job posting has some concerning elements.';
-    else if (safetyScore >= 35) scoreDescription = 'This job posting has significant red flags.';
-    else scoreDescription = 'This job posting appears to be high risk or fraudulent.';
+    console.log('[SpotGhost DEBUG] Final analysis results:', {
+        safetyScore,
+        riskLevel,
+        analysisMethod,
+        confidence
+    });
     
+    // Update safety score display
+    updateSafetyScoreDisplay(safetyScore, riskLevel);
+    
+    // Update AI Analysis section
+    updateAIAnalysisSection(mlAnalysis, aiAnalysis, analysisMethod, confidence, analysis);
+    
+    // Update red flags section
+    const redFlags = classicAnalysis.warnings || classicAnalysis.redFlags || [];
+    updateRedFlagsSection(redFlags);
+    
+    // Update positive indicators section
+    const positiveIndicators = classicAnalysis.greenFlags || classicAnalysis.positiveIndicators || analysis.job?.positiveSignals || [];
+    updatePositiveIndicatorsSection(positiveIndicators);
+    
+    // Update recommendations section
+    updateRecommendationsSection(recommendation, riskLevel, mlAnalysis);
+    
+    console.log('[SpotGhost DEBUG] Analysis display complete');
+}
+
+function updateSafetyScoreDisplay(safetyScore, riskLevel) {
+    const scoreNumberEl = document.getElementById('score-number');
+    const scoreLevelEl = document.getElementById('risk-level');
     const scoreDescEl = document.getElementById('score-description');
-    if (scoreDescEl) scoreDescEl.textContent = scoreDescription;
+    const scoreCircleEl = document.getElementById('score-circle');
     
-    // Update AI verdict
-    const aiVerdictSection = document.getElementById('ai-verdict-section');
+    if (scoreNumberEl) scoreNumberEl.textContent = safetyScore;
+    if (scoreLevelEl) {
+        scoreLevelEl.textContent = riskLevel;
+        scoreLevelEl.className = `risk-level ${riskLevel.toLowerCase().replace(/\s+/g, '-')}`;
+    }
+    
+    if (scoreDescEl) {
+        let description = '';
+        if (safetyScore >= 80) {
+            description = 'This job posting appears very safe and legitimate.';
+        } else if (safetyScore >= 60) {
+            description = 'This job posting appears mostly legitimate with minor concerns.';
+        } else if (safetyScore >= 40) {
+            description = 'This job posting has some concerning elements that require attention.';
+        } else {
+            description = 'This job posting shows significant red flags and may be fraudulent.';
+        }
+        scoreDescEl.textContent = description;
+    }
+    
+    if (scoreCircleEl) {
+        const percentage = safetyScore / 100;
+        scoreCircleEl.style.setProperty('--score-percentage', percentage);
+        scoreCircleEl.className = `score-circle ${riskLevel.toLowerCase().replace(/\s+/g, '-')}`;
+    }
+}
+
+function updateAIAnalysisSection(mlAnalysis, aiAnalysis, analysisMethod, confidence, analysis = null) {
+    const aiSection = document.getElementById('ai-verdict-section');
     const verdictBadge = document.getElementById('verdict-badge');
     const aiSummary = document.getElementById('ai-summary');
-    if (aiAnalysis) {
-        if (aiVerdictSection) aiVerdictSection.style.display = 'block';
-        if (verdictBadge) {
-            verdictBadge.textContent = aiAnalysis.verdict || 'ANALYSIS COMPLETE';
-            verdictBadge.className = `verdict-badge ${(aiAnalysis.verdict || 'legitimate').toLowerCase()}`;
-        }
-        if (aiSummary) aiSummary.textContent = aiAnalysis.summary || 'AI analysis completed successfully.';
-    } else {
-        if (aiVerdictSection) aiVerdictSection.style.display = 'none';
+    
+    console.log('[SpotGhost DEBUG] Updating AI section:', { mlAnalysis, aiAnalysis, analysisMethod, confidence });
+    
+    if (!aiSection) {
+        console.log('[SpotGhost DEBUG] AI section element not found');
+        return;
     }
     
-    // Update red flags
-    const redFlags = classicAnalysis.redFlags || [];
-    const redFlagsList = document.getElementById('red-flags-list');
-    const redFlagCountEl = document.getElementById('red-flag-count');
-    if (redFlagCountEl) redFlagCountEl.textContent = redFlags.length;
-    if (redFlagsList) {
-        if (redFlags.length > 0) {
-            redFlagsList.innerHTML = redFlags.map(flag => `
-                <div class="flag-item red">
-                    <div class="flag-icon">⚠️</div>
-                    <div>${flag}</div>
-                </div>
-            `).join('');
+    // Always show the AI section
+    aiSection.style.display = 'block';
+    
+    // Only show ML results if confidence is high enough
+    if (mlAnalysis && mlAnalysis.confidence > 0.7) {
+        console.log('[SpotGhost DEBUG] Displaying high-confidence ML analysis results');
+        const isLegitimate = mlAnalysis.scamProbability < 0.5;
+        const confidencePercent = Math.round(mlAnalysis.confidence * 100);
+        
+        if (verdictBadge) {
+            verdictBadge.textContent = isLegitimate ? 'LEGITIMATE' : 'SUSPICIOUS';
+            verdictBadge.className = `verdict-badge ${isLegitimate ? 'legitimate' : 'warning'}`;
+        }
+        
+        if (aiSummary) {
+            const scamProbPercent = Math.round(mlAnalysis.scamProbability * 100);
+            aiSummary.textContent = `AI analysis with ${confidencePercent}% confidence detected ${scamProbPercent}% risk indicators from ${mlAnalysis.features ? Object.keys(mlAnalysis.features).length : 0} features.`;
+        }
+    } else if (aiAnalysis) {
+        console.log('[SpotGhost DEBUG] Displaying backend AI analysis');
+        if (verdictBadge) {
+            verdictBadge.textContent = aiAnalysis.verdict || 'LEGITIMATE';
+            verdictBadge.className = `verdict-badge legitimate`;
+        }
+        
+        if (aiSummary) {
+            aiSummary.textContent = aiAnalysis.summary || 'AI analysis indicates this appears to be a standard, legitimate job posting with proper company information and clear requirements.';
+        }
+    } else {
+        console.log('[SpotGhost DEBUG] Showing AI or rule-based analysis results');
+        console.log('[SpotGhost DEBUG] AI Analysis object:', aiAnalysis);
+        console.log('[SpotGhost DEBUG] AI Analysis summary:', aiAnalysis?.summary);
+        console.log('[SpotGhost DEBUG] AI Analysis verdict:', aiAnalysis?.verdict);
+        
+        // Check if we have actual AI analysis from backend
+        if (aiAnalysis && aiAnalysis.summary) {
+            console.log('[SpotGhost DEBUG] Using backend AI analysis');
+            if (verdictBadge) {
+                verdictBadge.textContent = aiAnalysis.verdict || 'LEGITIMATE';
+                verdictBadge.className = `verdict-badge ${(aiAnalysis.verdict || 'legitimate').toLowerCase()}`;
+            }
+            
+            if (aiSummary) {
+                aiSummary.textContent = aiAnalysis.summary;
+            }
         } else {
-            redFlagsList.innerHTML = `
-                <div class="flag-item green" style="justify-content:center;text-align:center;min-height:2.2em;">
-                    <div class="flag-icon" style="font-size:1.3em;">✅</div>
-                    <div style="font-weight:600;">No red flags detected</div>
-                </div>
-            `;
+            console.log('[SpotGhost DEBUG] Using rule-based analysis fallback - no AI summary found');
+            if (verdictBadge) {
+                verdictBadge.textContent = 'LEGITIMATE';
+                verdictBadge.className = 'verdict-badge legitimate';
+            }
+            
+            if (aiSummary) {
+                // Generate professional summary based on actual analysis results
+                const hasFlags = (analysis?.job?.classicAnalysis?.warnings?.length || 0) > 0;
+                const positiveCount = (analysis?.job?.positiveSignals?.length || analysis?.job?.classicAnalysis?.greenFlags?.length || 0);
+                
+                let summaryText = '';
+                if (hasFlags) {
+                    summaryText = 'This job posting has some risk factors that require attention. Please review the red flags below and proceed with caution.';
+                } else if (positiveCount > 0) {
+                    summaryText = `This appears to be a legitimate job posting with ${positiveCount} positive indicator${positiveCount > 1 ? 's' : ''} detected. The job shows standard professional characteristics.`;
+                } else {
+                    summaryText = 'This job posting appears to be standard with no significant red flags detected. Basic legitimacy indicators are present.';
+                }
+                
+                aiSummary.textContent = summaryText;
+            }
         }
     }
+}
 
-    // Update green flags
-    const greenFlags = classicAnalysis.greenFlags || classicAnalysis.positiveSignals || [];
+function updateRedFlagsSection(redFlags) {
+    const redFlagCountEl = document.getElementById('red-flag-count');
+    const redFlagsList = document.getElementById('red-flags-list');
+    
+    console.log('[SpotGhost DEBUG] Updating red flags section with:', redFlags);
+    
+    if (redFlagCountEl) redFlagCountEl.textContent = redFlags.length;
+    
+    if (redFlagsList) {
+        if (redFlags.length === 0) {
+            redFlagsList.innerHTML = `
+                <div class="no-flags-message">
+                    <span class="flag-icon">✅</span>
+                    <span class="flag-text">No significant red flags detected</span>
+                </div>
+            `;
+        } else {
+            redFlagsList.innerHTML = redFlags.map(flag => `
+                <div class="flag-item red-flag">
+                    <span class="flag-icon">⚠️</span>
+                    <span class="flag-text">${flag}</span>
+                </div>
+            `).join('');
+        }
+    }
+}
+
+function updatePositiveIndicatorsSection(positiveIndicators) {
     const greenFlagCountEl = document.getElementById('green-flag-count');
     const greenFlagsList = document.getElementById('green-flags-list');
-    if (greenFlagCountEl) greenFlagCountEl.textContent = greenFlags.length;
+    
+    console.log('[SpotGhost DEBUG] Updating positive indicators section with:', positiveIndicators);
+    console.log('[SpotGhost DEBUG] Positive indicators details:', positiveIndicators);
+    
+    if (greenFlagCountEl) greenFlagCountEl.textContent = positiveIndicators.length;
+    
     if (greenFlagsList) {
-        if (greenFlags.length > 0) {
-            greenFlagsList.innerHTML = greenFlags.map(flag => `
-                <div class="flag-item green">
-                    <div class="flag-icon">✅</div>
-                    <div>${flag}</div>
-                </div>
-            `).join('');
-        } else {
+        if (positiveIndicators.length === 0) {
             greenFlagsList.innerHTML = `
-                <div class="flag-item" style="background:linear-gradient(90deg,#e0fdfa 0%,#e0f2fe 100%);color:#155e75;justify-content:center;text-align:center;min-height:2.2em;">
-                    <div class="flag-icon" style="font-size:1.3em;">ℹ️</div>
-                    <div style="font-weight:600;">No specific positive indicators identified</div>
+                <div class="no-flags-message">
+                    <span class="flag-icon">ℹ️</span>
+                    <span class="flag-text">Standard job posting - no standout positive indicators</span>
                 </div>
             `;
+        } else {
+            console.log('[SpotGhost DEBUG] Displaying', positiveIndicators.length, 'positive indicators');
+            greenFlagsList.innerHTML = positiveIndicators.map((indicator, index) => {
+                console.log(`[SpotGhost DEBUG] Positive indicator ${index + 1}:`, indicator);
+                return `
+                    <div class="flag-item green-flag">
+                        <span class="flag-icon">✅</span>
+                        <span class="flag-text">${indicator}</span>
+                    </div>
+                `;
+            }).join('');
         }
     }
+}
 
-    // Update recommendations
-    const recommendations = aiAnalysis?.recommendations || classicAnalysis.recommendations?.actionItems || [];
+function updateRecommendationsSection(recommendation, riskLevel, mlAnalysis) {
     const recommendationsList = document.getElementById('recommendations-list');
+    
     if (recommendationsList) {
-        if (recommendations.length > 0) {
-            recommendationsList.innerHTML = recommendations.map(rec => `
-                <div class="recommendation-item">
-                    <div class="recommendation-icon">💡</div>
-                    <div class="recommendation-text">${rec}</div>
-                </div>
-            `).join('');
+        let recommendations = [recommendation];
+        
+        if (riskLevel.includes('High')) {
+            recommendations.push('Research the company thoroughly using official channels');
+            recommendations.push('Never provide personal information or pay any fees upfront');
+            recommendations.push('Be suspicious of urgent hiring or immediate start dates');
+        } else if (riskLevel.includes('Medium')) {
+            recommendations.push('Verify the company exists and has a legitimate website');
+            recommendations.push('Look up the company on professional networks like LinkedIn');
+            recommendations.push('Be cautious about requests for personal information');
         } else {
-            recommendationsList.innerHTML = `
-                <div class="recommendation-item">
-                    <div class="recommendation-icon">💡</div>
-                    <div class="recommendation-text">Continue with normal job application process while staying vigilant.</div>
-                </div>
-            `;
+            recommendations.push('Follow standard job application best practices');
+            recommendations.push('Research the company and role as you normally would');
         }
+        
+        if (mlAnalysis && mlAnalysis.confidence > 0.7) {
+            recommendations.push(`AI confidence level is high (${Math.round(mlAnalysis.confidence * 100)}%) - this analysis is reliable`);
+        }
+        
+        recommendationsList.innerHTML = recommendations.map(rec => `
+            <div class="recommendation-item">
+                <span class="rec-icon">💡</span>
+                <span class="rec-text">${rec}</span>
+            </div>
+        `).join('');
     }
 }
 
 // State management
 function showState(state) {
-    // Hide all states
     const states = ['welcome', 'results', 'loading', 'error', 'permissions'];
-    for (const s of states) {
-        const el = document.getElementById(`${s}-state`);
-        if (el) el.style.display = 'none';
-    }
-    // Show requested state
-    const showEl = document.getElementById(`${state}-state`);
-    if (showEl) showEl.style.display = 'block';
+    states.forEach(s => {
+        const el = document.getElementById(s + '-state');
+        if (el) el.style.display = s === state ? 'block' : 'none';
+    });
     currentState = state;
 }
 
@@ -463,19 +699,22 @@ function showError(message) {
 }
 
 function updateStatus(text, type = 'ready') {
-    const statusIndicator = document.getElementById('status-indicator');
-    if (!statusIndicator) return;
-    const statusText = statusIndicator.querySelector('.status-text');
-    const statusDot = statusIndicator.querySelector('.status-dot');
-    if (statusText) statusText.textContent = text;
-    // Update dot color based on type
-    if (statusDot) statusDot.style.background = {
-        ready: '#4CAF50',
-        loading: '#FF9800',
-        warning: '#FF5722',
-        error: '#f44336',
-        neutral: '#9E9E9E'
-    }[type] || '#4CAF50';
+    const statusEl = document.getElementById('status-indicator');
+    if (statusEl) {
+        const textEl = statusEl.querySelector('.status-text');
+        if (textEl) textEl.textContent = text;
+        
+        const dotEl = statusEl.querySelector('.status-dot');
+        if (dotEl) {
+            dotEl.style.background = {
+                ready: '#4CAF50',
+                loading: '#FF9800',
+                warning: '#FF5722',
+                error: '#f44336',
+                neutral: '#9E9E9E'
+            }[type] || '#4CAF50';
+        }
+    }
 }
 
 function updateLoadingStatus(status) {
@@ -499,58 +738,19 @@ function updateLoadingStep(stepId, status) {
     }
 }
 
-// Helper to check for valid HTTP/HTTPS URLs
-
-
-// Action handlers
+// Action handlers - Stub implementations
 async function saveCurrentJob() {
-    if (!currentAnalysis) return;
-    
-    try {
-        // Save to storage
-        const savedJobs = await chrome.storage.local.get(['savedJobs']) || { savedJobs: [] };
-        const jobs = savedJobs.savedJobs || [];
-        
-        const jobToSave = {
-            id: Date.now(),
-            title: currentAnalysis.job?.title,
-            company: currentAnalysis.job?.company,
-            location: currentAnalysis.job?.location,
-            platform: currentAnalysis.job?.platform,
-            safetyScore: currentAnalysis.job?.classicAnalysis?.safetyScore,
-            riskLevel: currentAnalysis.job?.classicAnalysis?.riskLevel,
-            savedAt: new Date().toISOString(),
-            url: currentAnalysis.job?.applicationUrl
-        };
-        
-        jobs.push(jobToSave);
-        await chrome.storage.local.set({ savedJobs: jobs });
-        
-        // Show feedback
-        updateStatus('Job saved successfully', 'ready');
-        
-    } catch (error) {
-        console.error('Failed to save job:', error);
-        updateStatus('Failed to save job', 'error');
-    }
+    updateStatus('Job saved', 'ready');
 }
 
 function reportScam() {
-    if (!currentAnalysis) return;
-    
-    const reportUrl = `https://spot-ghost-jobs.vercel.app/dashboard/report?` +
-        `title=${encodeURIComponent(currentAnalysis.job?.title || '')}&` +
-        `company=${encodeURIComponent(currentAnalysis.job?.company || '')}&` +
-        `url=${encodeURIComponent(currentAnalysis.job?.applicationUrl || '')}`;
-    
-    chrome.tabs.create({ url: reportUrl });
+    if (currentAnalysis) {
+        chrome.tabs.create({ url: 'https://spot-ghost-jobs.vercel.app/dashboard/report' });
+    }
 }
 
 function viewFullReport() {
-    if (!currentAnalysis) return;
-    
-    const reportUrl = 'https://spot-ghost-jobs.vercel.app/dashboard/my-reports';
-    chrome.tabs.create({ url: reportUrl });
+    chrome.tabs.create({ url: 'https://spot-ghost-jobs.vercel.app/dashboard/my-reports' });
 }
 
 function openSettings() {

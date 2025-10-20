@@ -952,42 +952,20 @@ function cleanJobData(jobData) {
   return jobData;
 }
 
-// Real-time analysis and UI injection
+// Real-time analysis and UI injection (streamlined for side panel)
 function initializeRealTimeFeatures() {
   console.log('SpotGhost Content: Initializing real-time features...');
   
-  // Remove any existing floating buttons and UI elements first
+  // Clean up any existing UI elements
   const existingButton = document.getElementById('spotghost-floating-btn');
-  if (existingButton) {
-    existingButton.remove();
-    console.log('SpotGhost: Removed existing floating button');
-  }
+  if (existingButton) existingButton.remove();
   
-  // Remove any existing warning banners
   const existingWarnings = document.querySelectorAll('.spotghost-warning-container');
-  existingWarnings.forEach(warning => {
-    warning.remove();
-    console.log('SpotGhost: Removed existing warning banner');
-  });
-  
-  // Remove any existing styles that might contain floating button CSS
-  const existingStyles = document.getElementById('spotghost-styles');
-  if (existingStyles) {
-    existingStyles.remove();
-    console.log('SpotGhost: Removed existing styles');
-  }
-  
-  // DON'T inject enhanced styles that contain floating button CSS
-  // injectEnhancedStyles();
+  existingWarnings.forEach(warning => warning.remove());
   
   const platform = detectPlatform();
   console.log('SpotGhost Content: Detected platform:', platform?.name || 'Unknown');
-  
-  // DISABLED: All UI features disabled for side panel mode
-  // addInlineRiskIndicators();
-  // setTimeout(performAutoScan, 3000);
-  
-  console.log('SpotGhost Content: Real-time features initialized (all UI features disabled for side panel)');
+  console.log('SpotGhost Content: Real-time features initialized (side panel mode)');
 }
 
 // Classic analysis logic ported from backend (pure JS, safe for extension)
@@ -1170,11 +1148,114 @@ function classicJobAnalysis(jobData, opts = {}) {
   };
 }
 
-// Show quick warning for high-risk jobs (DISABLED for side panel mode)
-function showQuickWarning(scanResult) {
-  console.log('SpotGhost: Quick warning disabled in side panel mode');
-  return;
+// ML Data Collection for Training
+class MLDataCollector {
+  constructor() {
+    this.storageKey = 'spotghost_ml_training_data';
+    this.maxSamples = 1000; // Limit storage size
+  }
+
+  async saveJobSample(jobData, humanLabel = null, classicResult = null) {
+    try {
+      const sample = {
+        id: Date.now() + Math.random(),
+        timestamp: new Date().toISOString(),
+        jobData: {
+          title: jobData.title,
+          company: jobData.company,
+          description: jobData.description?.substring(0, 2000), // Limit size
+          location: jobData.location,
+          salary: jobData.salary,
+          platform: jobData.platform
+        },
+        features: this.extractFeatures(jobData),
+        humanLabel, // 'scam' | 'legitimate' | null (unlabeled)
+        classicResult: classicResult ? {
+          riskLevel: classicResult.riskLevel,
+          safetyScore: classicResult.safetyScore,
+          warningCount: classicResult.warnings?.length || 0
+        } : null
+      };
+
+      const stored = await this.getStoredSamples();
+      stored.push(sample);
+      
+      // Keep only recent samples to prevent storage overflow
+      if (stored.length > this.maxSamples) {
+        stored.splice(0, stored.length - this.maxSamples);
+      }
+
+      await chrome.storage.local.set({ [this.storageKey]: stored });
+      console.log('SpotGhost ML: Sample saved for training', sample.id);
+      return sample.id;
+    } catch (error) {
+      console.error('SpotGhost ML: Failed to save training sample', error);
+    }
+  }
+
+  async getStoredSamples() {
+    try {
+      const result = await chrome.storage.local.get(this.storageKey);
+      return result[this.storageKey] || [];
+    } catch (error) {
+      console.error('SpotGhost ML: Failed to get stored samples', error);
+      return [];
+    }
+  }
+
+  async getLabeledSamples() {
+    const samples = await this.getStoredSamples();
+    return samples.filter(sample => sample.humanLabel !== null);
+  }
+
+  extractFeatures(jobData) {
+    // Extract numerical features for ML training
+    const desc = (jobData.description || '').toLowerCase();
+    const title = (jobData.title || '').toLowerCase();
+    const company = (jobData.company || '').toLowerCase();
+    
+    return {
+      descriptionLength: desc.length,
+      titleLength: title.length,
+      companyLength: company.length,
+      hasEmail: !!jobData.contactEmail,
+      hasSalary: !!jobData.salary,
+      hasLocation: !!jobData.location,
+      isRemote: desc.includes('remote') || desc.includes('work from home'),
+      urgencyWords: (desc.match(/urgent|immediate|asap|quickly/g) || []).length,
+      moneyWords: (desc.match(/money|cash|payment|fee/g) || []).length,
+      genericWords: (desc.match(/competitive|dynamic|team player|excellent/g) || []).length,
+      platform: jobData.platform || 'unknown'
+    };
+  }
+
+  async exportForTraining() {
+    const labeledSamples = await this.getLabeledSamples();
+    console.log(`SpotGhost ML: Exporting ${labeledSamples.length} labeled samples for training`);
+    return labeledSamples;
+  }
 }
+
+// Initialize ML data collector and ML model
+const mlDataCollector = new MLDataCollector();
+let mlModel = null;
+
+// Initialize ML model when page loads
+async function initializeMLModel() {
+  try {
+    if (typeof SpotGhostMLModel !== 'undefined') {
+      mlModel = new SpotGhostMLModel();
+      await mlModel.initialize(); // Use the new initialize method that loads TensorFlow
+      console.log('SpotGhost ML: Model initialized', mlModel.getStatus());
+    } else {
+      console.warn('SpotGhost ML: MLModel class not available');
+    }
+  } catch (error) {
+    console.error('SpotGhost ML: Failed to initialize model', error);
+  }
+}
+
+// Removed showQuickWarning - not needed for side panel mode
 
 // Analyze current job (triggered by user action)
 async function analyzeCurrentJob() {
@@ -1182,8 +1263,13 @@ async function analyzeCurrentJob() {
     const jobData = extractJobData();
     // Run classic analysis locally for instant feedback
     const classicAnalysis = classicJobAnalysis(jobData);
+    
+    // Save job data for ML training (with classic analysis results)
+    await mlDataCollector.saveJobSample(jobData, null, classicAnalysis);
+    
     // Show loading state
     showAnalysisLoading();
+    
     // Send to background script for full AI analysis
     chrome.runtime.sendMessage({
       action: 'analyzeJob',
@@ -1214,19 +1300,7 @@ async function analyzeCurrentJob() {
   }
 }
 
-// Check company reputation
-function checkCompanyReputation(companyName) {
-  chrome.runtime.sendMessage({
-    action: 'checkCompanyReputation',
-    company: companyName
-  }, (response) => {
-    if (response && response.isKnownScam) {
-      alert(`⚠️ WARNING: "${companyName}" has been reported as a potential scam company.`);
-    } else {
-      alert(`✅ No scam reports found for "${companyName}".`);
-    }
-  });
-}
+// Removed checkCompanyReputation - not used in current flow
 
 // Show analysis loading state
 function showAnalysisLoading() {
@@ -1282,34 +1356,121 @@ if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.onMessage)
         return true;
       }
       if (message.action === 'extractAndAnalyzeJob') {
-        try {
-          const jobData = extractJobData();
-          // Always run and attach classic analysis
-          let classicAnalysis = null;
-          if (typeof performClassicAnalysis === 'function') {
-            classicAnalysis = performClassicAnalysis(jobData);
-          } else if (typeof performQuickRiskScan === 'function') {
-            classicAnalysis = performQuickRiskScan(jobData);
-          } else if (typeof classicJobAnalysis === 'function') {
-            classicAnalysis = classicJobAnalysis(jobData);
-          }
-          jobData.classicAnalysis = classicAnalysis;
-          // Run AI analysis if available (OG function)
-          let aiAnalysis = null;
-          if (typeof performAIAnalysis === 'function') {
-            aiAnalysis = performAIAnalysis(jobData);
-          }
-          const analysis = {
-            job: {
-              ...jobData,
-              aiAnalysis,
-              platform: message.platform || jobData.platform || null
+        (async () => {
+          try {
+            const jobData = extractJobData();
+            // Run classic analysis - streamlined version
+            const classicAnalysis = classicJobAnalysis(jobData);
+            jobData.classicAnalysis = classicAnalysis;
+            
+            // Save for ML training
+            await mlDataCollector.saveJobSample(jobData, null, classicAnalysis);
+            
+            // Try ML analysis if model is ready
+            let mlAnalysis = null;
+            if (mlModel && mlModel.isReady) {
+              try {
+                mlAnalysis = await mlModel.predict(jobData);
+                console.log('SpotGhost ML: ML prediction completed', mlAnalysis);
+              } catch (mlError) {
+                console.warn('SpotGhost ML: ML prediction failed', mlError);
+              }
             }
-          };
-          sendResponse({ success: true, analysis });
-        } catch (err) {
-          sendResponse({ success: false, error: err.message });
-        }
+            
+            // Prepare response with both classic and ML analysis
+            const analysis = {
+              job: {
+                ...jobData,
+                classicAnalysis,
+                mlAnalysis, // New ML-based analysis
+                aiAnalysis: null, // Backend AI analysis (separate)
+                platform: message.platform || jobData.platform || null
+              }
+            };
+            sendResponse({ success: true, analysis });
+          } catch (err) {
+            sendResponse({ success: false, error: err.message });
+          }
+        })();
+        return true;
+      }
+
+      // ML Data Management endpoints
+      if (message.action === 'labelJobData') {
+        (async () => {
+          try {
+            const { jobId, label } = message;
+            const samples = await mlDataCollector.getStoredSamples();
+            const sample = samples.find(s => s.id === jobId);
+            if (sample) {
+              sample.humanLabel = label; // 'scam' or 'legitimate'
+              await chrome.storage.local.set({ [mlDataCollector.storageKey]: samples });
+              sendResponse({ success: true });
+            } else {
+              sendResponse({ success: false, error: 'Job not found' });
+            }
+          } catch (err) {
+            sendResponse({ success: false, error: err.message });
+          }
+        })();
+        return true;
+      }
+
+      if (message.action === 'exportMLData') {
+        (async () => {
+          try {
+            const data = await mlDataCollector.exportForTraining();
+            sendResponse({ success: true, data });
+          } catch (err) {
+            sendResponse({ success: false, error: err.message });
+          }
+        })();
+        return true;
+      }
+
+      // ML Model Training endpoints
+      if (message.action === 'trainMLModel') {
+        (async () => {
+          try {
+            if (!mlModel) {
+              mlModel = new SpotGhostMLModel();
+              await mlModel.initialize(); // Initialize with TensorFlow loading
+            }
+            
+            const labeledData = await mlDataCollector.getLabeledSamples();
+            if (labeledData.length < 10) {
+              sendResponse({ success: false, error: 'Need at least 10 labeled samples to train' });
+              return;
+            }
+            
+            const result = await mlModel.trainModel(labeledData);
+            sendResponse({ success: true, result });
+          } catch (err) {
+            sendResponse({ success: false, error: err.message });
+          }
+        })();
+        return true;
+      }
+
+      if (message.action === 'getMLStatus') {
+        (async () => {
+          try {
+            const status = mlModel ? mlModel.getStatus() : { isReady: false, hasModel: false };
+            const dataStats = await mlDataCollector.getStoredSamples();
+            const labeledCount = dataStats.filter(s => s.humanLabel).length;
+            
+            sendResponse({ 
+              success: true, 
+              status: {
+                ...status,
+                totalSamples: dataStats.length,
+                labeledSamples: labeledCount
+              }
+            });
+          } catch (err) {
+            sendResponse({ success: false, error: err.message });
+          }
+        })();
         return true;
       }
     } catch (error) {
@@ -1328,10 +1489,12 @@ if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', () => {
     console.log('SpotGhost Content: DOMContentLoaded fired');
     initializeRealTimeFeatures();
+    initializeMLModel(); // Initialize ML model
   });
 } else {
   console.log('SpotGhost Content: Document already ready, initializing immediately');
   initializeRealTimeFeatures();
+  initializeMLModel(); // Initialize ML model
 }
 
 // Re-initialize on navigation (for SPAs)

@@ -277,17 +277,34 @@ async function handleJobAnalysis(jobData, sendResponse) {
     const settings = await chrome.storage.local.get(['apiEndpoint']);
     const apiUrl = `${settings.apiEndpoint || 'https://spot-ghost-jobs.vercel.app'}/api/jobs/analyze`;
     
-    // Check cache first
+    // Check cache first - TEMPORARILY DISABLED FOR TESTING
     let cacheKey;
     try {
       cacheKey = generateCacheKey(jobData);
+      console.log('[SpotGhost DEBUG] Generated cache key:', cacheKey);
+      console.log('[SpotGhost DEBUG] Cache key based on:', {
+        title: jobData.title,
+        company: jobData.company,
+        descriptionStart: (jobData.description || '').substring(0, 50) + '...'
+      });
+      
+      console.log('[SpotGhost DEBUG] CACHE DISABLED - Will always fetch fresh analysis');
+      
+      // CACHE TEMPORARILY DISABLED - Remove this block to re-enable
+      /*
       const cached = await getCachedResult(cacheKey);
       
       if (cached && (Date.now() - cached.timestamp) < CACHE_DURATION) {
-        console.log('📦 Returning cached analysis');
+        console.log('📦 Returning cached analysis - THIS IS WHY RESULTS ARE SAME!');
+        console.log('[SpotGhost DEBUG] Cached result timestamp:', new Date(cached.timestamp));
         sendResponse({ success: true, analysis: cached.data, cached: true });
         return;
+      } else if (cached) {
+        console.log('[SpotGhost DEBUG] Cache expired, will fetch fresh analysis');
+      } else {
+        console.log('[SpotGhost DEBUG] No cached result found, will fetch fresh analysis');
       }
+      */
     } catch (cacheError) {
       console.warn('Cache check failed:', cacheError);
       // Continue without cache
@@ -323,14 +340,27 @@ async function handleJobAnalysis(jobData, sendResponse) {
     
     const result = await response.json();
     console.log('✅ Analysis completed successfully');
+    console.log('[SpotGhost DEBUG] Backend response status:', response.status);
+    console.log('[SpotGhost DEBUG] Backend response headers:', response.headers);
+    console.log('[SpotGhost DEBUG] Full backend response keys:', Object.keys(result));
+    if (result.job) {
+      console.log('[SpotGhost DEBUG] Backend job keys:', Object.keys(result.job));
+      console.log('[SpotGhost DEBUG] Backend aiAnalysis value:', result.job.aiAnalysis);
+      console.log('[SpotGhost DEBUG] Backend aiAnalysis type:', typeof result.job.aiAnalysis);
+    }
     // Debug log for AI analysis
     if (result && result.job) {
       console.log('[SpotGhost DEBUG] Backend API response job object:', result.job);
+      console.log('[SpotGhost DEBUG] AI Analysis in job object:', result.job.aiAnalysis);
       if (result.job.aiAnalysis) {
         console.log('[SpotGhost DEBUG] AI analysis result:', result.job.aiAnalysis);
       } else {
         console.log('[SpotGhost DEBUG] No AI analysis result present in backend response.');
+        console.log('[SpotGhost DEBUG] Backend should have created fallback AI analysis - check server logs');
       }
+    } else {
+      console.log('[SpotGhost DEBUG] No job object in backend response');
+      console.log('[SpotGhost DEBUG] Available keys in response:', Object.keys(result || {}));
     }
     // Cache the result if we have a cache key
     if (cacheKey) {

@@ -62,6 +62,11 @@ function DashboardHome() {
         body: JSON.stringify({ ...manualData, method: 'manual' })
       });
       const result = await response.json();
+      console.log('📥 Manual analysis response received:', result);
+      console.log('📊 Has aiAnalysis:', !!result?.job?.aiAnalysis);
+      console.log('📊 aiAnalysis verdict:', result?.job?.aiAnalysis?.verdict);
+      console.log('📊 aiAnalysis summary:', result?.job?.aiAnalysis?.summary);
+      
       if (response.ok) {
         setAnalysisResult(result);
       } else {
@@ -417,7 +422,6 @@ function DashboardHome() {
           {analysisResult.method === 'link' && (
             <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8 text-center">
               <h3 className="text-xl font-semibold text-yellow-200 mb-4 flex items-center justify-center">
-                <span className="mr-2">🧩</span>
                 Use the SpotGhost Extension
               </h3>
               <div className="text-gray-200 text-base mb-2">
