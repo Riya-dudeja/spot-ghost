@@ -7,12 +7,44 @@ import { GoogleGenAI } from '@google/genai';
 // Handle GET requests for testing
 export async function GET(req) {
   console.log('GET request received at /api/jobs/analyze');
+  
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const legacyKey = process.env.API_KEY;
+  
+  // Test Gemini API connection
+  let geminiTest = 'Not tested';
+  let geminiError = null;
+  
+  try {
+    if (geminiKey) {
+      console.log('Testing Gemini API with student account key...');
+      const { GoogleGenAI } = await import('@google/genai');
+      const genAI = new GoogleGenAI({});  // Auto-detects GEMINI_API_KEY from env
+      
+      const result = await genAI.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: 'Just say "Hello from Gemini!"'
+      });
+      geminiTest = 'SUCCESS: ' + result.text;
+    } else {
+      geminiTest = 'No GEMINI_API_KEY found';
+    }
+  } catch (error) {
+    console.error('Gemini API test error:', error.message);
+    console.error('Full error:', error);
+    geminiError = error.message;
+    geminiTest = 'ERROR: ' + error.message;
+  }
+  
   return NextResponse.json({ 
     message: 'Analyze API is working', 
     timestamp: new Date().toISOString(),
-    hasApiKey: !!process.env.API_KEY,
-    apiKeyLength: process.env.API_KEY ? process.env.API_KEY.length : 0,
-    nodeEnv: process.env.NODE_ENV
+    hasGeminiApiKey: !!geminiKey,
+    hasLegacyApiKey: !!legacyKey,
+    geminiKeyLength: geminiKey ? geminiKey.length : 0,
+    nodeEnv: process.env.NODE_ENV,
+    geminiTest: geminiTest,
+    geminiError: geminiError
   });
 }
 
@@ -78,7 +110,8 @@ export async function POST(req) {
         console.log('🚀 Calling analyzeJobWithAI function...');
         geminiAI = await analyzeJobWithAI(jobData);
         console.log('🔍 Gemini AI analysis result type:', typeof geminiAI);
-        console.log('🔍 Gemini AI analysis result:', JSON.stringify(geminiAI, null, 2));
+        console.log('🔍 Gemini AI result keys:', geminiAI ? Object.keys(geminiAI) : 'null');
+        console.log('🔍 Gemini AI has real analysis:', !!(geminiAI && geminiAI.verdict && !geminiAI.analysis?.includes('Fallback')));
         
         if (geminiAI?.analysis) {
           text = geminiAI.analysis;
@@ -193,6 +226,8 @@ export async function POST(req) {
             companyAnalysis: geminiAI.company_analysis,
             jobDescriptionAnalysis: geminiAI.job_description_analysis,
             contactAnalysis: geminiAI.contact_analysis,
+            domainAnalysis: geminiAI.domain_analysis,
+            recommendations: geminiAI.recommendations,
             otherNotes: geminiAI.other_notes,
             raw: geminiAI.analysis
           } : null,
@@ -500,45 +535,68 @@ function generateProfessionalSummary(classic, geminiAI) {
   return summary.trim();
 }
 
-// Gemini AI analysis with structured prompt and robust JSON parsing
+// Enhanced Gemini AI analysis with intelligent company research
 export async function analyzeJobWithAI(jobData) {
   const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-  console.log('🔑 API Key check:', !!apiKey);
+  console.log('🔑 Checking API keys...');
+  console.log('🔑 GEMINI_API_KEY available:', !!process.env.GEMINI_API_KEY);
+  console.log('🔑 Legacy API_KEY available:', !!process.env.API_KEY);
+  console.log('🔑 Using key:', apiKey ? `${apiKey.substring(0, 10)}...` : 'None');
+  
   if (!apiKey) {
     console.log('❌ No API key configured');
     return null;
   }
-  
+
   try {
+    console.log('🤖 Performing intelligent AI analysis with company research...');
     console.log('🌐 Initializing Google GenAI client...');
-    const genAI = new GoogleGenAI({ apiKey });
-    const model = genAI.getModel({ model: 'gemini-2.5-flash' });
+    const genAI = new GoogleGenAI({});  // Auto-detects GEMINI_API_KEY from env
     
-    const prompt = `You are an expert job fraud detection agent. Analyze the provided job details and return your findings in the following JSON format:
+    const intelligentPrompt = `You are an expert job fraud detection agent with comprehensive knowledge of companies, industries, and job market patterns. Before analyzing the job posting, you must first research and verify the company background using your knowledge base.
+
+ANALYSIS PROCESS:
+1. COMPANY RESEARCH & VERIFICATION (Do this first):
+   - Use your knowledge to identify if this is a real, established company
+   - Check if the company name matches known legitimate businesses
+   - Assess company reputation, industry standing, and public presence
+   - Identify if it's a Fortune 500, publicly traded, or well-known private company
+   - Look for red flags in company naming patterns (generic names, suspicious keywords)
+   - Evaluate domain/website legitimacy if provided
+   - Cross-reference company industry with job description
+
+2. JOB CONTENT ANALYSIS:
+   - Analyze job description quality and authenticity
+   - Check for scam language patterns and unrealistic promises
+   - Evaluate salary appropriateness for role and location
+   - Assess contact information professionalism
+   - Verify job requirements align with company type
+
+3. INTEGRATED ASSESSMENT:
+   - Combine company research findings with job content analysis
+   - Provide final verdict based on comprehensive evaluation
+
+Return your findings in this JSON format:
 
 {
   "verdict": "LEGITIMATE | SUSPICIOUS | FRAUDULENT",
   "confidence": "0-100",
-  "summary": "A concise, plain-language summary of your reasoning (2-3 sentences, no generic statements).",
-  "red_flags": ["List specific, actionable red flags with evidence from the job data."],
-  "green_flags": ["List specific, actionable positive signals with evidence from the job data."],
-  "company_analysis": "Is the company real, established, and reputable? Reference any evidence.",
-  "job_description_analysis": "Is the job description realistic and detailed? Reference any evidence.",
-  "contact_analysis": "Is the contact information professional and matching the company domain?",
-  "recommendations": ["List clear, actionable next steps for the user (e.g., 'Verify the company website', 'Do not provide personal information', etc.)"]
+  "summary": "A comprehensive summary that leads with your company research findings, then job analysis (3-4 sentences)",
+  "red_flags": ["List specific red flags from company research AND job content"],
+  "green_flags": ["List specific positive signals from company research AND job content"],
+  "company_analysis": "Detailed company research results - is this a real, established company? Include specific details about company type, industry, reputation",
+  "job_description_analysis": "Analysis of job description quality, authenticity, and alignment with company profile",
+  "contact_analysis": "Analysis of contact information professionalism and company alignment",
+  "domain_analysis": "Website/domain legitimacy assessment if URL provided",
+  "recommendations": ["Specific actionable recommendations based on complete research and analysis"]
 }
 
-Here are the job details:
+JOB DETAILS TO ANALYZE:
 Title: ${jobData.title}
 Company: ${jobData.company}
 Location: ${jobData.location || 'N/A'}
-Job Type: ${jobData.jobType || 'N/A'}
-Experience Level: ${jobData.experienceLevel || 'N/A'}
 Salary/Compensation: ${jobData.salary || 'N/A'}
-Company Size: ${jobData.companySize || 'N/A'}
-Posted Date: ${jobData.postedDate || 'N/A'}
-Application Deadline: ${jobData.applicationDeadline || 'N/A'}
-Source URL: ${jobData.applicationUrl || 'N/A'}
+Application URL: ${jobData.applicationUrl || 'N/A'}
 
 Job Description:
 ${jobData.description}
@@ -546,28 +604,28 @@ ${jobData.description}
 Requirements:
 ${jobData.requirements || 'N/A'}
 
-Qualifications:
-${jobData.qualifications || 'N/A'}
-
-Benefits:
-${jobData.benefits || 'N/A'}
-
 Contact Info:
 ${jobData.contactEmail || 'N/A'}
 
-Application Instructions:
-${jobData.applicationInstructions || 'N/A'}
+CRITICAL INSTRUCTIONS:
+- Start with thorough company research using your knowledge base
+- If you recognize the company as legitimate (Fortune 500, well-known tech company, established corporation), weight this heavily in your analysis
+- If the company is unknown or has suspicious naming patterns, be more skeptical
+- Provide specific, evidence-based reasoning that references your company knowledge
+- Cross-reference all job details with your company research findings
+- Be comprehensive but concise in your analysis
 
-Be as specific as possible, reference the job data directly, and do not provide generic statements. Only output valid JSON.`;
+Only output valid JSON.`;
 
-    console.log('📤 Sending request to Gemini 2.5 Flash...');
-    const result = await model.generateContent(prompt);
+    console.log('📤 Sending intelligent research request to Gemini 2.5 Flash...');
+    const result = await genAI.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: intelligentPrompt
+    });
     
-    console.log('📥 Gemini response received');
-    const raw = result.response.text();
-    console.log('📝 Raw Gemini response (first 200 chars):', raw.substring(0, 200));
-    
-    let parsed = null;
+    console.log('📥 Intelligent Gemini response received');
+    const raw = result.text;
+    console.log('📝 Raw Gemini response (first 200 chars):', raw.substring(0, 200));    let parsed = null;
     try {
       // Find the first JSON object in the response (in case Gemini adds text before/after)
       const jsonMatch = raw.match(/\{[\s\S]*\}/);
@@ -580,7 +638,7 @@ Be as specific as possible, reference the job data directly, and do not provide 
     }
     
     if (parsed) {
-      console.log('✅ Successfully parsed Gemini JSON response');
+      console.log('✅ Successfully parsed intelligent Gemini JSON response');
       return {
         analysis: raw,
         hasContent: true,
@@ -592,18 +650,19 @@ Be as specific as possible, reference the job data directly, and do not provide 
         company_analysis: parsed.company_analysis,
         job_description_analysis: parsed.job_description_analysis,
         contact_analysis: parsed.contact_analysis,
+        domain_analysis: parsed.domain_analysis,
         recommendations: parsed.recommendations,
         other_notes: parsed.other_notes
       };
     } else {
-      console.log('⚠️ Failed to parse Gemini response as JSON, returning raw text');
+      console.log('⚠️ Failed to parse intelligent Gemini response as JSON, returning raw text');
       return {
         analysis: raw,
         hasContent: raw.length > 0
       };
     }
   } catch (error) {
-    console.error('❌ Gemini AI analysis error:', error.message);
+    console.error('❌ Intelligent Gemini AI analysis error:', error.message);
     console.error('Error details:', error);
     return null;
   }

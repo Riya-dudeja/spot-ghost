@@ -532,6 +532,11 @@ function DashboardHome() {
                       <strong>Contact Analysis:</strong> {analysisResult.job.aiAnalysis.contactAnalysis}
                     </div>
                   )}
+                  {analysisResult.job.aiAnalysis.domainAnalysis && (
+                    <div className="text-blue-200 text-sm bg-blue-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
+                      <strong>Domain & Website Analysis:</strong> {analysisResult.job.aiAnalysis.domainAnalysis}
+                    </div>
+                  )}
                   {analysisResult.job.aiAnalysis.otherNotes && (
                     <div className="text-purple-200 text-sm bg-purple-900/5 rounded-xl p-4 border border-gray-700 mb-3">
                       <strong>Other Notes:</strong> {analysisResult.job.aiAnalysis.otherNotes}
