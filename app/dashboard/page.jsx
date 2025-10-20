@@ -380,54 +380,96 @@ function DashboardHome() {
 
           {/* LINKONLY: Classic URL check only */}
           {analysisResult.method === 'linkonly' && analysisResult.job && analysisResult.job.analysis && (
-            <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8">
-              <h3 className="text-xl font-semibold text-blue-200 mb-4 flex items-center">
-                <span className="mr-2">🔗</span>
-                Link Safety Check
-              </h3>
-              <div className="text-gray-200 text-lg font-bold mb-2">
-                Safety Score: <span className="text-emerald-400">{analysisResult.job.analysis.safetyScore ?? 'N/A'}</span>
+            <div className="bg-slate-900/80 shadow-lg border border-slate-600/50 rounded-xl sm:rounded-2xl p-6 sm:p-8 mb-8 backdrop-blur-sm">
+              <div className="flex items-center mb-6">
+                <div className="w-10 h-10 bg-slate-700 border border-slate-600 rounded-lg flex items-center justify-center mr-4">
+                  <Globe size={20} className="text-slate-300" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-white">Link Safety Check</h3>
+                  <p className="text-slate-400 text-sm">URL reputation analysis</p>
+                </div>
               </div>
-              <div className="text-gray-300 text-base mb-2">
-                <strong>Risk Level:</strong> {analysisResult.job.analysis.riskLevel}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-4">
+                  <h4 className="text-slate-300 text-sm font-medium mb-1">Safety Score</h4>
+                  <div className="text-2xl font-bold text-slate-200">
+                    {analysisResult.job.analysis.safetyScore ?? 'N/A'}
+                  </div>
+                </div>
+                <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-4">
+                  <h4 className="text-slate-300 text-sm font-medium mb-1">Risk Assessment</h4>
+                  <div className="text-lg font-semibold text-white">
+                    {analysisResult.job.analysis.riskLevel}
+                  </div>
+                </div>
               </div>
+
               {analysisResult.job.analysis.warnings && analysisResult.job.analysis.warnings.length > 0 && (
-                <div className="text-yellow-200 text-sm bg-yellow-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                  <strong>Red Flags:</strong>
-                  <ul className="list-disc ml-6 mt-2">
+                <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-5 mb-4">
+                  <h5 className="text-red-300 font-medium mb-3 flex items-center">
+                    <AlertTriangle size={16} className="mr-2" />
+                    Security Warnings
+                  </h5>
+                  <ul className="space-y-2">
                     {analysisResult.job.analysis.warnings.map((item, idx) => (
-                      <li key={idx}>{item}</li>
+                      <li key={idx} className="text-red-200 text-sm flex items-start">
+                        <span className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                        {item}
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
+
               {analysisResult.job.analysis.recommendations && (
-                <div className="text-green-200 text-sm bg-green-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                  <strong>Recommendations:</strong>
-                  <ul className="list-disc ml-6 mt-2">
+                <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-5 mb-4">
+                  <h5 className="text-slate-300 font-medium mb-3 flex items-center">
+                    <CheckCircle size={16} className="mr-2" />
+                    Recommendations
+                  </h5>
+                  <ul className="space-y-2">
                     {analysisResult.job.analysis.recommendations.summary?.map((item, idx) => (
-                      <li key={idx}>{item}</li>
+                      <li key={idx} className="text-slate-200 text-sm flex items-start">
+                        <span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                        {item}
+                      </li>
                     ))}
                   </ul>
                 </div>
               )}
-              <div className="mt-4 text-xs text-blue-400 flex items-center">
-                <span className="mr-2">🌐</span>
-                <span>Link checked using SpotGhost and urlscan.io</span>
+
+              <div className="border-t border-slate-600/20 pt-4">
+                <div className="flex items-center text-slate-400 text-xs">
+                  <Shield size={14} className="mr-2" />
+                  <span>Link verified using SpotGhost and urlscan.io</span>
+                </div>
               </div>
             </div>
           )}
 
           {/* LINK: Prompt to use extension */}
           {analysisResult.method === 'link' && (
-            <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8 text-center">
-              <h3 className="text-xl font-semibold text-yellow-200 mb-4 flex items-center justify-center">
-                Use the SpotGhost Extension
-              </h3>
-              <div className="text-gray-200 text-base mb-2">
-                For a full, accurate job analysis, please use the <span className="font-bold text-yellow-200">SpotGhost browser extension</span> to extract all job details directly from the job board page.
+            <div className="bg-slate-900/80 shadow-lg border border-slate-600/50 rounded-xl sm:rounded-2xl p-6 sm:p-8 mb-8 backdrop-blur-sm">
+              <div className="flex items-start space-x-4">
+                <div className="w-12 h-12 bg-slate-700 border border-slate-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <Shield size={24} className="text-slate-300" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-xl font-semibold text-white mb-3">
+                    Use SpotGhost Browser Extension
+                  </h3>
+                  <p className="text-slate-300 text-base leading-relaxed mb-4">
+                    For comprehensive job analysis, install the <span className="font-semibold text-white">SpotGhost browser extension</span> to extract complete job details directly from job board pages.
+                  </p>
+                  <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-3">
+                    <p className="text-slate-400 text-sm">
+                      The extension provides more accurate analysis by accessing full job posting data that may not be available through URL parsing alone.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="text-yellow-200 text-xs mt-2">This ensures you get the most reliable and detailed results.</div>
             </div>
           )}
 
@@ -435,119 +477,252 @@ function DashboardHome() {
           {analysisResult.job && analysisResult.job.classicAnalysis && (
             <>
               {/* Classic Analysis Section */}
-              <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8">
-                <h3 className="text-xl font-semibold text-green-200 mb-4 flex items-center">
-                  <span className="mr-2">🛡️</span>
-                  Classic Analysis
-                </h3>
-                <div className="text-gray-200 text-lg font-bold mb-2">
-                  Safety Score: <span className="text-emerald-400">{analysisResult.job.classicAnalysis.safetyScore ?? 'N/A'}</span>
-                </div>
-                <div className="text-gray-300 text-base mb-2">
-                  <strong>Risk Level:</strong> {analysisResult.job.classicAnalysis.riskLevel}
-                </div>
-                {analysisResult.job.classicAnalysis.redFlags && analysisResult.job.classicAnalysis.redFlags.length > 0 && (
-                  <div className="text-yellow-200 text-sm bg-yellow-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                    <strong>Red Flags:</strong>
-                    <ul className="list-disc ml-6 mt-2">
-                      {analysisResult.job.classicAnalysis.redFlags.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
+              <div className="bg-gradient-to-br from-emerald-900/30 to-green-900/30 shadow-lg border border-emerald-600/30 rounded-xl sm:rounded-2xl p-6 sm:p-8 mb-8 backdrop-blur-sm">
+                {/* Header */}
+                <div className="flex items-center mb-6">
+                  <div className="w-10 h-10 bg-gradient-to-r from-emerald-500 to-green-600 rounded-lg flex items-center justify-center mr-4">
+                    <Shield size={20} className="text-white" />
                   </div>
-                )}
-                {analysisResult.job.classicAnalysis.greenFlags && analysisResult.job.classicAnalysis.greenFlags.length > 0 && (
-                  <div className="text-green-200 text-sm bg-green-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                    <strong>Positive Signals:</strong>
-                    <ul className="list-disc ml-6 mt-2">
-                      {analysisResult.job.classicAnalysis.greenFlags.map((item, idx) => (
-                        <li key={idx}>{item}</li>
-                      ))}
-                    </ul>
+                  <div>
+                    <h3 className="text-xl font-semibold text-white">SpotGhost Classic Analysis</h3>
+                    <p className="text-emerald-300 text-sm">Rule-based detection system</p>
                   </div>
-                )}
-                <div className="mt-4 text-xs text-green-200 flex items-center">
-                  <span className="mr-2">🔍</span>
-                  <span>Classic SpotGhost analysis</span>
+                </div>
+
+                {/* Safety Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                    <h4 className="text-emerald-300 text-sm font-medium mb-1">Safety Score</h4>
+                    <div className="text-2xl font-bold text-emerald-400">
+                      {analysisResult.job.classicAnalysis.safetyScore ?? 'N/A'}
+                    </div>
+                  </div>
+                  <div className="bg-slate-500/10 border border-slate-500/20 rounded-lg p-4">
+                    <h4 className="text-slate-300 text-sm font-medium mb-1">Risk Assessment</h4>
+                    <div className="text-lg font-semibold text-white">
+                      {analysisResult.job.classicAnalysis.riskLevel}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Flags Grid */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                  {/* Red Flags */}
+                  {analysisResult.job.classicAnalysis.redFlags && analysisResult.job.classicAnalysis.redFlags.length > 0 && (
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-5">
+                      <h5 className="text-red-300 font-medium mb-3 flex items-center">
+                        <AlertTriangle size={16} className="mr-2" />
+                        Detected Issues
+                      </h5>
+                      <ul className="space-y-2">
+                        {analysisResult.job.classicAnalysis.redFlags.map((item, idx) => (
+                          <li key={idx} className="text-red-200 text-sm flex items-start">
+                            <span className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Green Flags */}
+                  {analysisResult.job.classicAnalysis.greenFlags && analysisResult.job.classicAnalysis.greenFlags.length > 0 && (
+                    <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-5">
+                      <h5 className="text-emerald-300 font-medium mb-3 flex items-center">
+                        <CheckCircle size={16} className="mr-2" />
+                        Quality Indicators
+                      </h5>
+                      <ul className="space-y-2">
+                        {analysisResult.job.classicAnalysis.greenFlags.map((item, idx) => (
+                          <li key={idx} className="text-emerald-200 text-sm flex items-start">
+                            <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="border-t border-emerald-600/20 pt-4">
+                  <div className="flex items-center text-emerald-300 text-xs">
+                    <Shield size={14} className="mr-2" />
+                    <span>Powered by SpotGhost rule-based detection algorithms</span>
+                  </div>
                 </div>
               </div>
 
               {/* AI Analysis Section (Advisory) */}
               {analysisResult.job.aiAnalysis && (
-                <div className="bg-gray-900/80 shadow-md border border-gray-700 rounded-xl sm:rounded-2xl p-4 sm:p-8 mb-8">
-                  <h3 className="text-xl font-semibold text-purple-200 mb-4 flex items-center">
-                    <span className="mr-2">🤖</span>
-                    Gemini AI Analysis <span className="ml-2 text-xs text-purple-200">(Advisory)</span>
-                  </h3>
-                  <div className="text-purple-200 text-xs mb-2">
-                    The following AI analysis is advisory and may not be 100% accurate. Always use your own judgment and verify job details independently.
+                <div className="bg-gradient-to-br from-slate-900/90 to-slate-800/90 shadow-lg border border-slate-600/50 rounded-xl sm:rounded-2xl p-6 sm:p-8 mb-8 backdrop-blur-sm">
+                  {/* Header with modern styling */}
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center">
+                      <div className="w-10 h-10 bg-slate-700 border border-slate-600 rounded-lg flex items-center justify-center mr-4">
+                        <CheckCircle size={20} className="text-slate-300" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-semibold text-white">AI Analysis</h3>
+                        <p className="text-slate-400 text-sm">Advisory • Powered by Gemini</p>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-gray-200 text-lg font-bold mb-4">
-                    Verdict: <span className={
-                      analysisResult.job.aiAnalysis.verdict === 'LEGITIMATE' ? 'text-green-400' :
-                      analysisResult.job.aiAnalysis.verdict === 'SUSPICIOUS' ? 'text-yellow-400' :
-                      analysisResult.job.aiAnalysis.verdict === 'FRAUDULENT' ? 'text-red-400' : 'text-gray-200'
-                    }>{analysisResult.job.aiAnalysis.verdict || 'Unknown'}</span>
-                    {analysisResult.job.aiAnalysis.confidence && (
-                      <span className="ml-4 text-xs text-purple-200">Confidence: {analysisResult.job.aiAnalysis.confidence}</span>
+
+                  {/* Disclaimer */}
+                  <div className="bg-slate-700/30 border border-slate-600/50 rounded-lg p-4 mb-6">
+                    <div className="flex items-start space-x-3">
+                      <AlertTriangle size={16} className="text-slate-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-slate-300 text-sm">
+                        <strong>Advisory Notice:</strong> This AI analysis provides supplementary insights and may not be 100% accurate. 
+                        Always use your own judgment and verify job details independently.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Verdict Badge */}
+                  <div className="mb-6">
+                    <div className="inline-flex items-center space-x-3">
+                      <span className="text-slate-300 font-medium">Verdict:</span>
+                      <div className={`px-4 py-2 rounded-full text-sm font-semibold ${
+                        analysisResult.job.aiAnalysis.verdict === 'LEGITIMATE' 
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
+                        analysisResult.job.aiAnalysis.verdict === 'SUSPICIOUS' 
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' :
+                        analysisResult.job.aiAnalysis.verdict === 'FRAUDULENT' 
+                          ? 'bg-red-500/20 text-red-300 border border-red-500/30' : 
+                          'bg-slate-500/20 text-slate-300 border border-slate-500/30'
+                      }`}>
+                        {analysisResult.job.aiAnalysis.verdict || 'Unknown'}
+                      </div>
+                      {analysisResult.job.aiAnalysis.confidence && (
+                        <span className="text-slate-400 text-sm">
+                          Confidence: <span className="font-medium">{analysisResult.job.aiAnalysis.confidence}</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Main Analysis Summary */}
+                  {analysisResult.job.aiAnalysis.summary && (
+                    <div className="mb-6">
+                      <h4 className="text-lg font-medium text-white mb-3 flex items-center">
+                        <FileText size={18} className="text-slate-400 mr-3" />
+                        Analysis Summary
+                      </h4>
+                      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-600/30">
+                        <p className="text-slate-200 leading-relaxed whitespace-pre-wrap">
+                          {analysisResult.job.aiAnalysis.summary}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Analysis Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    {/* Red Flags */}
+                    {analysisResult.job.aiAnalysis.redFlags && analysisResult.job.aiAnalysis.redFlags.length > 0 && (
+                      <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-5">
+                        <h5 className="text-red-300 font-medium mb-3 flex items-center">
+                          <AlertTriangle size={16} className="mr-2" />
+                          Risk Factors
+                        </h5>
+                        <ul className="space-y-2">
+                          {analysisResult.job.aiAnalysis.redFlags.map((item, idx) => (
+                            <li key={idx} className="text-red-200 text-sm flex items-start">
+                              <span className="w-1.5 h-1.5 bg-red-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Green Flags */}
+                    {analysisResult.job.aiAnalysis.greenFlags && analysisResult.job.aiAnalysis.greenFlags.length > 0 && (
+                      <div className="bg-emerald-500/5 border border-emerald-500/20 rounded-lg p-5">
+                        <h5 className="text-emerald-300 font-medium mb-3 flex items-center">
+                          <CheckCircle size={16} className="mr-2" />
+                          Positive Signals
+                        </h5>
+                        <ul className="space-y-2">
+                          {analysisResult.job.aiAnalysis.greenFlags.map((item, idx) => (
+                            <li key={idx} className="text-emerald-200 text-sm flex items-start">
+                              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
-                  {analysisResult.job.aiAnalysis.summary && (
-                    <div className="text-gray-300 whitespace-pre-wrap leading-relaxed text-base font-mono bg-gray-800/60 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      {analysisResult.job.aiAnalysis.summary}
-                    </div>
-                  )}
-                  {analysisResult.job.aiAnalysis.redFlags && analysisResult.job.aiAnalysis.redFlags.length > 0 && (
-                    <div className="text-yellow-200 text-sm bg-yellow-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      <strong>AI-Identified Red Flags:</strong>
-                      <ul className="list-disc ml-6 mt-2">
-                        {analysisResult.job.aiAnalysis.redFlags.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {analysisResult.job.aiAnalysis.greenFlags && analysisResult.job.aiAnalysis.greenFlags.length > 0 && (
-                    <div className="text-green-200 text-sm bg-green-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      <strong>AI-Identified Positive Signals:</strong>
-                      <ul className="list-disc ml-6 mt-2">
-                        {analysisResult.job.aiAnalysis.greenFlags.map((item, idx) => (
-                          <li key={idx}>{item}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {analysisResult.job.aiAnalysis.companyAnalysis && (
-                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      <strong>Company Analysis:</strong> {analysisResult.job.aiAnalysis.companyAnalysis}
-                    </div>
-                  )}
-                  {analysisResult.job.aiAnalysis.jobDescriptionAnalysis && (
-                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      <strong>Job Description Analysis:</strong> {analysisResult.job.aiAnalysis.jobDescriptionAnalysis}
-                    </div>
-                  )}
-                  {analysisResult.job.aiAnalysis.contactAnalysis && (
-                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      <strong>Contact Analysis:</strong> {analysisResult.job.aiAnalysis.contactAnalysis}
-                    </div>
-                  )}
-                  {analysisResult.job.aiAnalysis.domainAnalysis && (
-                    <div className="text-blue-200 text-sm bg-blue-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      <strong>Domain & Website Analysis:</strong> {analysisResult.job.aiAnalysis.domainAnalysis}
-                    </div>
-                  )}
-                  {analysisResult.job.aiAnalysis.otherNotes && (
-                    <div className="text-purple-200 text-sm bg-purple-900/5 rounded-xl p-4 border border-gray-700 mb-3">
-                      <strong>Other Notes:</strong> {analysisResult.job.aiAnalysis.otherNotes}
-                    </div>
-                  )}
+
+                  {/* Detailed Analysis Sections */}
+                  <div className="space-y-4">
+                    {analysisResult.job.aiAnalysis.companyAnalysis && (
+                      <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-4">
+                        <h5 className="text-slate-300 font-medium mb-2 flex items-center">
+                          <Briefcase size={14} className="mr-2" />
+                          Company Research
+                        </h5>
+                        <p className="text-slate-200 text-sm leading-relaxed">{analysisResult.job.aiAnalysis.companyAnalysis}</p>
+                      </div>
+                    )}
+
+                    {analysisResult.job.aiAnalysis.jobDescriptionAnalysis && (
+                      <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-4">
+                        <h5 className="text-slate-300 font-medium mb-2 flex items-center">
+                          <FileText size={14} className="mr-2" />
+                          Job Description Assessment
+                        </h5>
+                        <p className="text-slate-200 text-sm leading-relaxed">{analysisResult.job.aiAnalysis.jobDescriptionAnalysis}</p>
+                      </div>
+                    )}
+
+                    {analysisResult.job.aiAnalysis.contactAnalysis && (
+                      <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-4">
+                        <h5 className="text-slate-300 font-medium mb-2 flex items-center">
+                          <Globe size={14} className="mr-2" />
+                          Contact Information Review
+                        </h5>
+                        <p className="text-slate-200 text-sm leading-relaxed">{analysisResult.job.aiAnalysis.contactAnalysis}</p>
+                      </div>
+                    )}
+
+                    {analysisResult.job.aiAnalysis.domainAnalysis && (
+                      <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-4">
+                        <h5 className="text-slate-300 font-medium mb-2 flex items-center">
+                          <Globe size={14} className="mr-2" />
+                          Website & Domain Analysis
+                        </h5>
+                        <p className="text-slate-200 text-sm leading-relaxed">{analysisResult.job.aiAnalysis.domainAnalysis}</p>
+                      </div>
+                    )}
+
+                    {analysisResult.job.aiAnalysis.otherNotes && (
+                      <div className="bg-slate-700/20 border border-slate-600/40 rounded-lg p-4">
+                        <h5 className="text-slate-300 font-medium mb-2 flex items-center">
+                          <FileText size={14} className="mr-2" />
+                          Additional Notes
+                        </h5>
+                        <p className="text-slate-200 text-sm leading-relaxed">{analysisResult.job.aiAnalysis.otherNotes}</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Recommendations */}
                   {analysisResult.job.aiAnalysis.recommendations && analysisResult.job.aiAnalysis.recommendations.length > 0 && (
-                    <div className="text-blue-200 text-sm bg-blue-900/5 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-gray-700 mb-3">
-                      <strong>AI Recommendations:</strong>
-                      <ul className="list-disc ml-6 mt-2">
+                    <div className="mt-6 bg-slate-700/20 border border-slate-600/40 rounded-lg p-5">
+                      <h5 className="text-slate-300 font-medium mb-3 flex items-center">
+                        <Briefcase size={16} className="mr-2" />
+                        Recommendations
+                      </h5>
+                      <ul className="space-y-2">
                         {analysisResult.job.aiAnalysis.recommendations.map((item, idx) => (
-                          <li key={idx}>{item}</li>
+                          <li key={idx} className="text-slate-200 text-sm flex items-start">
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                            {item}
+                          </li>
                         ))}
                       </ul>
                     </div>
