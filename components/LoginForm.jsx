@@ -23,6 +23,12 @@ const LoginForm = () => {
         body: JSON.stringify(formData),
       });
 
+      // Check if response has content before parsing JSON
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Server returned an invalid response. Please try again.');
+      }
+
       const data = await res.json();
       console.log('Login response:', { status: res.status, data });
       
