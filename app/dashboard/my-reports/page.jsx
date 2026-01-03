@@ -71,7 +71,21 @@ export default function MyReportsPage() {
   const [error, setError] = useState(null);
   const [openJobIdx, setOpenJobIdx] = useState(null);
   const [openReportIdx, setOpenReportIdx] = useState(null);
+  const [expandedDescriptions, setExpandedDescriptions] = useState({});
   const [activeTab, setActiveTab] = useState('jobs'); // 'jobs' or 'reports'
+
+  const toggleDescription = (type, id) => {
+    setExpandedDescriptions(prev => ({
+      ...prev,
+      [`${type}-${id}`]: !prev[`${type}-${id}`]
+    }));
+  };
+
+  const truncateText = (text, maxLength = 300) => {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
 
   useEffect(() => {
     async function fetchData() {
@@ -167,23 +181,82 @@ export default function MyReportsPage() {
                         <span className="text-emerald-300">{openJobIdx === idx ? '−' : '+'}</span>
                       </button>
                       {openJobIdx === idx && (
-                        <div className="px-4 pb-4">
-                          <div className="text-gray-400 text-sm mb-1">{job.location}</div>
-                          <div className="text-gray-400 text-sm mb-1">Risk Level: <span className="font-semibold">{job.riskLevel}</span></div>
+                        <div className="px-4 pb-4 space-y-3">
+                          {/* Basic Info */}
+                          <div className="flex items-center gap-4 mb-2">
+                            <div className="text-gray-400 text-sm">{job.location}</div>
+                            <div className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                              job.riskLevel === 'Very Low' ? 'bg-green-500/20 text-green-300' :
+                              job.riskLevel === 'Low' ? 'bg-emerald-500/20 text-emerald-300' :
+                              job.riskLevel === 'Medium' ? 'bg-yellow-500/20 text-yellow-300' :
+                              job.riskLevel === 'High' ? 'bg-orange-500/20 text-orange-300' :
+                              'bg-red-500/20 text-red-300'
+                            }`}>
+                              Risk: {job.riskLevel}
+                            </div>
+                            {job.score !== undefined && (
+                              <div className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300">
+                                Safety Score: {job.score}/100
+                              </div>
+                            )}
+                          </div>
+                          
                           {job.sourceUrl && (
-                            <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline text-xs mb-1 block">View Job</a>
+                            <a href={job.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline text-sm hover:text-cyan-300 block">
+                              🔗 View Original Job Posting
+                            </a>
                           )}
-                          <div className="text-gray-400 text-sm mb-1">{job.description}</div>
+                          
+                          {/* Description */}
+                          <div>
+                            <div className="font-semibold text-white text-sm mb-1">Description:</div>
+                            <div className="text-gray-400 text-sm">
+                              {expandedDescriptions[`job-${job._id}`] 
+                                ? job.description 
+                                : truncateText(job.description, 300)}
+                              {job.description && job.description.length > 300 && (
+                                <button 
+                                  onClick={() => toggleDescription('job', job._id)}
+                                  className="text-cyan-400 ml-2 underline text-xs hover:text-cyan-300"
+                                >
+                                  {expandedDescriptions[`job-${job._id}`] ? 'Show Less' : 'Show More'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Red Flags */}
                           {job.flags && job.flags.length > 0 && (
-                            <div className="mt-2">
-                              <div className="font-semibold text-yellow-300 mb-1">Red Flags:</div>
-                              <ul className="list-disc ml-6 text-yellow-200 text-sm">
+                            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                              <div className="font-semibold text-red-300 mb-2 flex items-center">
+                                ⚠️ Red Flags Detected:
+                              </div>
+                              <ul className="list-disc ml-6 text-red-200 text-sm space-y-1">
                                 {job.flags.map((flag, fidx) => (
                                   <li key={fidx}>{flag}</li>
                                 ))}
                               </ul>
                             </div>
                           )}
+                          
+                          {/* Additional Info */}
+                          {(job.salary || job.email) && (
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              {job.salary && (
+                                <div>
+                                  <span className="text-gray-500">Salary:</span>
+                                  <span className="text-gray-300 ml-2">{job.salary}</span>
+                                </div>
+                              )}
+                              {job.email && (
+                                <div>
+                                  <span className="text-gray-500">Contact:</span>
+                                  <span className="text-gray-300 ml-2">{job.email}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          
                           <button
                             className="mt-4 px-4 py-2 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 transition-all duration-300"
                             onClick={() => handleDelete('job', job._id)}
@@ -219,7 +292,19 @@ export default function MyReportsPage() {
                           {report.jobLink && (
                             <a href={report.jobLink} target="_blank" rel="noopener noreferrer" className="text-cyan-400 underline text-xs mb-1 block">View Job</a>
                           )}
-                          <div className="text-gray-400 text-sm mb-1">{report.description}</div>
+                          <div className="text-gray-400 text-sm mb-1">
+                            {expandedDescriptions[`report-${report._id}`] 
+                              ? report.description 
+                              : truncateText(report.description, 300)}
+                            {report.description && report.description.length > 300 && (
+                              <button 
+                                onClick={() => toggleDescription('report', report._id)}
+                                className="text-cyan-400 ml-2 underline text-xs hover:text-cyan-300"
+                              >
+                                {expandedDescriptions[`report-${report._id}`] ? 'Show Less' : 'Show More'}
+                              </button>
+                            )}
+                          </div>
                           <div className="text-gray-400 text-xs mb-1">Submitted: {new Date(report.createdAt).toLocaleString()}</div>
                           {report.contactEmail && (
                             <div className="text-gray-400 text-xs mb-1">Contact: {report.contactEmail}</div>

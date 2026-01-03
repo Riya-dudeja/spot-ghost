@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export function proxy(request) {
-  // Only apply to dashboard routes
+
   if (request.nextUrl.pathname.startsWith('/dashboard')) {
     // Allow access to report page when coming from extension
     if (request.nextUrl.pathname === '/dashboard/report' && 
@@ -20,14 +20,14 @@ export function proxy(request) {
       return NextResponse.redirect(new URL('/login', request.url));
     }
     
-    // Basic token format validation (JWT has 3 parts separated by dots)
+    // Basic token format validation (JWT's 3 parts)
     const tokenParts = token.value.split('.');
     if (tokenParts.length !== 3) {
       console.log('Proxy - Invalid token format, redirecting to login');
       return NextResponse.redirect(new URL('/login', request.url));
     }
     
-    // Check if token is not obviously expired (basic check)
+    // (basic check)
     try {
       const payload = JSON.parse(atob(tokenParts[1]));
       const now = Math.floor(Date.now() / 1000);

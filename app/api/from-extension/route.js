@@ -90,7 +90,30 @@ export async function POST(request) {
     }
     
     // Save to database with analysis results
+    // Note: Extension doesn't have auth, so we'll use a default user or skip saving
+    // For now, we'll require auth or return analysis without saving
+    const { verifyAuth } = await import('@/lib/auth');
+    const user = await verifyAuth();
+    
+    if (!user) {
+      // Return analysis without saving if not authenticated
+      console.log('Extension request without auth - returning analysis only');
+      return Response.json({ 
+        success: true,
+        message: 'Job analyzed successfully (not saved - please login)',
+        analysis: {
+          safetyScore: analysis.safetyScore,
+          riskLevel: analysis.riskLevel,
+          warnings: analysis.warnings,
+          greenFlags: analysis.greenFlags,
+          recommendations: analysis.recommendations
+        },
+        aiAnalysis: aiAnalysis
+      });
+    }
+    
     const job = await Job.create({
+      userId: user.userId,
       title: jobData.title,
       company: jobData.company,
       location: jobData.location,

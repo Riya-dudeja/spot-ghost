@@ -3,6 +3,7 @@ import Job from '@/models/Job';
 import axios from 'axios';
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
+import { verifyAuth } from '@/lib/auth';
 
 // Handle GET requests for testing
 export async function GET(req) {
@@ -260,6 +261,50 @@ export async function POST(req) {
       analysisResult = await analyzeURL(url);
     } else {
       throw new Error('Invalid analysis method');
+    }
+
+    // Save the analyzed job to database if user is authenticated
+    await dbConnect();
+    const user = await verifyAuth();
+    
+    console.log('💾 Attempting to save job - User authenticated:', !!user);
+    console.log('💾 Has analysisResult.job:', !!analysisResult?.job);
+    console.log('💾 Is extension prompt:', !!analysisResult?.job?.extensionPrompt);
+    
+    if (!user) {
+      console.log('⚠️ Job not saved - user not authenticated');
+    } else if (!analysisResult.job) {
+      console.log('⚠️ Job not saved - no job data in analysis result');
+    } else if (analysisResult.job.extensionPrompt) {
+      console.log('⚠️ Job not saved - extension prompt placeholder');
+    }
+    
+    if (user && analysisResult.job && !analysisResult.job.extensionPrompt) {
+      try {
+        const savedJob = await Job.create({
+          userId: user.userId,
+          title: analysisResult.job.title || 'Unknown Job',
+          company: analysisResult.job.company || 'Unknown Company',
+          location: analysisResult.job.location || 'Unknown Location',
+          description: analysisResult.job.description || '',
+          salary: analysisResult.job.salary || '',
+          requirements: analysisResult.job.requirements || '',
+          email: analysisResult.job.contactEmail || '',
+          website: analysisResult.job.applicationUrl || url || '',
+          score: analysisResult.job.classicAnalysis?.safetyScore || 0,
+          flags: analysisResult.job.classicAnalysis?.redFlags || [],
+          riskLevel: analysisResult.job.classicAnalysis?.riskLevel || 'Medium',
+          method: method,
+          sourceUrl: url || ''
+        });
+        console.log('✅ Job saved to database with ID:', savedJob._id);
+        analysisResult.jobId = savedJob._id;
+        analysisResult.saved = true;
+      } catch (saveError) {
+        console.error('❌ Failed to save job to database:', saveError.message);
+        console.error('Full error:', saveError);
+        analysisResult.saveError = saveError.message;
+      }
     }
 
     return NextResponse.json({ ...analysisResult, method });

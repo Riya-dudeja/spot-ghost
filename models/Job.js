@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 
 const JobSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   title: {
     type: String,
     required: true,
@@ -25,6 +26,9 @@ const JobSchema = new mongoose.Schema({
     required: true
   },
   sourceUrl: String, // Original URL if extracted from job site
+  aiVerdict: String, // AI's overall verdict
+  aiSummary: String, // AI's analysis summary
+  aiConfidence: String, // AI's confidence level
   submittedAt: {
     type: Date,
     default: Date.now,
