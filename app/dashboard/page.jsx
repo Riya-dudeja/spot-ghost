@@ -62,10 +62,10 @@ function DashboardHome() {
         body: JSON.stringify({ ...manualData, method: 'manual' })
       });
       const result = await response.json();
-      console.log('📥 Manual analysis response received:', result);
-      console.log('📊 Has aiAnalysis:', !!result?.job?.aiAnalysis);
-      console.log('📊 aiAnalysis verdict:', result?.job?.aiAnalysis?.verdict);
-      console.log('📊 aiAnalysis summary:', result?.job?.aiAnalysis?.summary);
+      console.log('Manual analysis response received:', result);
+      console.log('Has aiAnalysis:', !!result?.job?.aiAnalysis);
+      console.log('aiAnalysis verdict:', result?.job?.aiAnalysis?.verdict);
+      console.log('aiAnalysis summary:', result?.job?.aiAnalysis?.summary);
       
       if (response.ok) {
         setAnalysisResult(result);

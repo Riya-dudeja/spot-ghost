@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
-import { LogOut, Settings, User } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 
 const links = [
   { href: '/dashboard', label: 'Analyze' },
@@ -137,12 +137,6 @@ const DashboardLayout = ({ children }) => {
                       className="flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
                     >
                       <User size={16} className="mr-2" /> Edit Profile
-                    </Link>
-                    <Link
-                      href="/dashboard/settings"
-                      className="flex items-center px-4 py-2 text-sm text-gray-200 hover:bg-gray-700"
-                    >
-                      <Settings size={16} className="mr-2" /> Settings
                     </Link>
                     <button
                       type="button"
