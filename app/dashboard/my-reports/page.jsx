@@ -207,23 +207,43 @@ export default function MyReportsPage() {
                             </a>
                           )}
                           
-                          {/* Description */}
-                          <div>
-                            <div className="font-semibold text-white text-sm mb-1">Description:</div>
-                            <div className="text-gray-400 text-sm">
-                              {expandedDescriptions[`job-${job._id}`] 
-                                ? job.description 
-                                : truncateText(job.description, 300)}
-                              {job.description && job.description.length > 300 && (
-                                <button 
-                                  onClick={() => toggleDescription('job', job._id)}
-                                  className="text-cyan-400 ml-2 underline text-xs hover:text-cyan-300"
-                                >
-                                  {expandedDescriptions[`job-${job._id}`] ? 'Show Less' : 'Show More'}
-                                </button>
+                          {/* AI Analysis Summary */}
+                          {job.aiSummary ? (
+                            <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-3">
+                              <div className="font-semibold text-purple-300 mb-2 flex items-center">
+                                🤖 AI Analysis
+                                {job.aiConfidence && (
+                                  <span className="ml-2 text-xs bg-purple-500/20 px-2 py-1 rounded-full">
+                                    {job.aiConfidence} confidence
+                                  </span>
+                                )}
+                              </div>
+                              {job.aiVerdict && (
+                                <div className="text-purple-200 font-medium mb-2">
+                                  Verdict: {job.aiVerdict}
+                                </div>
                               )}
+                              <div className="text-purple-100 text-sm">
+                                {expandedDescriptions[`ai-${job._id}`] 
+                                  ? job.aiSummary 
+                                  : truncateText(job.aiSummary, 200)}
+                                {job.aiSummary.length > 200 && (
+                                  <button 
+                                    onClick={() => toggleDescription('ai', job._id)}
+                                    className="text-purple-300 ml-2 underline text-xs hover:text-purple-200"
+                                  >
+                                    {expandedDescriptions[`ai-${job._id}`] ? 'Show Less' : 'Show More'}
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                          ) : (
+                            <div className="bg-gray-700/30 border border-gray-600/30 rounded-lg p-3">
+                              <div className="text-gray-400 text-sm italic">
+                                ⚠️ AI analysis not available for this job. Re-analyze to get AI insights.
+                              </div>
+                            </div>
+                          )}
                           
                           {/* Red Flags */}
                           {job.flags && job.flags.length > 0 && (

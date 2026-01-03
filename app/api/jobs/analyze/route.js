@@ -294,6 +294,9 @@ export async function POST(req) {
           score: analysisResult.job.classicAnalysis?.safetyScore || 0,
           flags: analysisResult.job.classicAnalysis?.redFlags || [],
           riskLevel: analysisResult.job.classicAnalysis?.riskLevel || 'Medium',
+          aiVerdict: analysisResult.job.aiAnalysis?.verdict || null,
+          aiSummary: analysisResult.job.aiAnalysis?.summary || null,
+          aiConfidence: analysisResult.job.aiAnalysis?.confidence || null,
           method: method,
           sourceUrl: url || ''
         });
