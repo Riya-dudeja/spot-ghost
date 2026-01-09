@@ -4,6 +4,8 @@ import axios from 'axios';
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { verifyAuth } from '@/lib/auth';
+import { enforceRateLimit, RateLimitPresets } from '@/lib/rateLimiter';
+import { parseJsonOrError, analyzeMethodBody } from '@/lib/validation';
 
 // Handle GET requests for testing
 export async function GET(req) {
@@ -53,7 +55,14 @@ export async function GET(req) {
 export async function POST(req) {
   console.log('POST request received at /api/jobs/analyze');
   try {
-    const requestData = await req.json();
+    // Rate limit job analysis requests
+    const rl = await enforceRateLimit(req, RateLimitPresets.analyzeJob);
+    if (!rl.allowed) return rl.response;
+
+    // Strict validation & sanitization for input
+    const parsed = await parseJsonOrError(req, analyzeMethodBody);
+    if (!parsed.ok) return parsed.response;
+    const requestData = parsed.data;
     console.log('Request data:', requestData);
     const { url, method } = requestData;
     

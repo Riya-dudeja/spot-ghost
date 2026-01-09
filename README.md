@@ -45,6 +45,16 @@ SpotGhost is a full-stack web application and Chrome extension designed to help 
 - For AI analysis, set your Gemini API key in the backend environment as `API_KEY`.
 - Example: On Vercel, add `API_KEY` in your project settings.
 
+## Security Hardening
+- Rate Limiting: All public endpoints enforce IP and per-user limits with graceful 429 responses.
+- Input Validation: Write/auth endpoints use strict Zod schemas (types, lengths, URL/email checks). Unexpected fields are rejected.
+- Sanitization: String inputs are trimmed/normalized to reduce injection risk.
+- Authentication: `JWT_SECRET` is only read from environment; cookies are `httpOnly`, `sameSite=lax`, and `secure` in production.
+- Keys Management: No secrets in source. Provide keys via environment variables and never expose via `NEXT_PUBLIC_*`.
+- OWASP Alignment: Measures mitigate brute-force, unsafe deserialization, and accidental secret exposure.
+
+See `.env.example` for required variables. Rotate credentials regularly.
+
 ## Deployment
 - Deploy the Next.js app easily on Vercel or your preferred platform.
 - The Chrome extension can be published to the Chrome Web Store or loaded unpacked for development.

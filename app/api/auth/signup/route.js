@@ -1,11 +1,19 @@
 import dbConnect from '@/lib/dbConnect';
 import User from '@/models/User';
 import bcrypt from 'bcryptjs';
+import { parseJsonOrError, signupBody } from '@/lib/validation';
+import { enforceRateLimit, RateLimitPresets } from '@/lib/rateLimiter';
 
 export async function POST(req) {
-  await dbConnect();
+  // Rate limit per IP to reduce automated signups
+  const rl = await enforceRateLimit(req, RateLimitPresets.authSignup);
+  if (!rl.allowed) return rl.response;
 
-  const { name, email, password } = await req.json();
+  await dbConnect();
+  // Strict input validation & sanitization
+  const parsed = await parseJsonOrError(req, signupBody);
+  if (!parsed.ok) return parsed.response;
+  const { name, email, password } = parsed.data;
 
   const existingUser = await User.findOne({ email });
   if (existingUser) {

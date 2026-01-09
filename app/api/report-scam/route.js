@@ -1,6 +1,16 @@
+import { enforceRateLimit, RateLimitPresets } from '@/lib/rateLimiter';
+import { parseJsonOrError, reportScamBody } from '@/lib/validation';
+
 export async function POST(req) {
   try {
-    const { jobTitle, company, url, reason, analysis } = await req.json();
+    // Rate limit public reporting endpoint
+    const rl = await enforceRateLimit(req, RateLimitPresets.reportScam);
+    if (!rl.allowed) return rl.response;
+
+    // Strict validation & sanitization
+    const parsed = await parseJsonOrError(req, reportScamBody);
+    if (!parsed.ok) return parsed.response;
+    const { jobTitle, company, url, reason, analysis } = parsed.data;
 
     // Log the scam report (you can enhance this to save to database)
     console.log('Scam Report Received:', {
@@ -15,9 +25,9 @@ export async function POST(req) {
     // Here you could save to your database
     // await Report.create({ jobTitle, company, url, reason, analysis, type: 'scam' });
 
-    return Response.json({ 
-      success: true, 
-      message: 'Scam report submitted successfully' 
+    return Response.json({
+      success: true,
+      message: 'Scam report submitted successfully'
     });
 
   } catch (error) {

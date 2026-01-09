@@ -3,6 +3,8 @@ import bcrypt from 'bcryptjs';
 import dbConnect from '@/lib/dbConnect';
 import User from '@/models/User';
 import { verifyAuth } from '@/lib/auth';
+import { enforceRateLimit, RateLimitPresets } from '@/lib/rateLimiter';
+import { parseJsonOrError, profileUpdateBody } from '@/lib/validation';
 
 // GET - Fetch user profile
 export async function GET() {
@@ -11,6 +13,10 @@ export async function GET() {
     if (!auth) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
+
+    // Rate limit per user for profile reads
+    const rl = await enforceRateLimit({ headers: new Map() }, { ...RateLimitPresets.profile, userId: auth.userId });
+    if (!rl.allowed) return rl.response;
 
     await dbConnect();
     
@@ -41,9 +47,14 @@ export async function PUT(request) {
     if (!auth) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
     }
+    // Rate limit per user for profile updates
+    const rl = await enforceRateLimit(request, { ...RateLimitPresets.profile, userId: auth.userId });
+    if (!rl.allowed) return rl.response;
 
-    const body = await request.json();
-    const { name, email, currentPassword, newPassword } = body;
+    // Strict validation & sanitization
+    const parsed = await parseJsonOrError(request, profileUpdateBody);
+    if (!parsed.ok) return parsed.response;
+    const { name, email, currentPassword, newPassword } = parsed.data;
 
     // Validate input
     if (!name || !email) {

@@ -3,12 +3,21 @@ import Job from '@/models/Job';
 
 // Import the analysis functions from the main analyze route
 import { analyzeJob, analyzeJobWithAI, generateRecommendations } from '../jobs/analyze/route.js';
+import { enforceRateLimit, RateLimitPresets } from '@/lib/rateLimiter';
+import { parseJsonOrError, extensionJobBody } from '@/lib/validation';
 
 export async function POST(request) {
   await dbConnect();
 
   try {
-    const body = await request.json();
+    // Rate limit extension submissions
+    const rl = await enforceRateLimit(request, RateLimitPresets.extensionPost);
+    if (!rl.allowed) return rl.response;
+
+    // Strict validation & sanitization
+    const parsed = await parseJsonOrError(request, extensionJobBody);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
     const { 
       title, 
       company, 

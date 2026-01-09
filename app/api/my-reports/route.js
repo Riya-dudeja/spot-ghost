@@ -3,11 +3,16 @@ import dbConnect from '@/lib/dbConnect';
 import Report from '@/models/Report';
 import Job from '@/models/Job';
 import { requireAuth } from '@/lib/auth';
+import { enforceRateLimit, RateLimitPresets } from '@/lib/rateLimiter';
+import { parseJsonOrError, myReportsDeleteBody } from '@/lib/validation';
 
 export async function GET(req) {
   await dbConnect();
   try {
     const user = await requireAuth();
+    // Rate limit per user for fetching reports
+    const rl = await enforceRateLimit(req, { ...RateLimitPresets.myReports, userId: user.userId });
+    if (!rl.allowed) return rl.response;
     
     // Remove duplicate jobs by title+company+description - filter by userId
     const jobsRaw = await Job.find({ userId: user.userId });
@@ -29,7 +34,14 @@ export async function DELETE(req) {
   await dbConnect();
   try {
     const user = await requireAuth();
-    const { type, id } = await req.json();
+    // Rate limit per user for deletions
+    const rl = await enforceRateLimit(req, { ...RateLimitPresets.myReports, userId: user.userId });
+    if (!rl.allowed) return rl.response;
+
+    // Strict validation of delete payload
+    const parsed = await parseJsonOrError(req, myReportsDeleteBody);
+    if (!parsed.ok) return parsed.response;
+    const { type, id } = parsed.data;
     
     if (type === 'job') {
       const job = await Job.findOne({ _id: id, userId: user.userId });

@@ -3,12 +3,21 @@ import User from '@/models/User';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
+import { parseJsonOrError, loginBody } from '@/lib/validation';
+import { enforceRateLimit, RateLimitPresets } from '@/lib/rateLimiter';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
 export async function POST(req) {
+  // Rate limit per IP to mitigate brute-force attacks
+  const rl = await enforceRateLimit(req, RateLimitPresets.authLogin);
+  if (!rl.allowed) return rl.response;
+
   await dbConnect();
-  const { email, password } = await req.json();
+  // Strict input validation & sanitization
+  const parsed = await parseJsonOrError(req, loginBody);
+  if (!parsed.ok) return parsed.response;
+  const { email, password } = parsed.data;
 
   const user = await User.findOne({ email });
   if (!user) {
